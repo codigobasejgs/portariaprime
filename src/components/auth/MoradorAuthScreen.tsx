@@ -62,7 +62,7 @@ export const MoradorAuthScreen: React.FC<MoradorAuthScreenProps> = ({
 
         <div className="bg-white rounded-3xl border-2 border-[#D4AF37] shadow-2xl overflow-hidden">
           <div className="bg-gradient-to-r from-[#061D12] via-[#0D3823] to-[#15462D] p-6 flex flex-col items-center text-center gap-1.5">
-            <VillageAzaleiaLogo size={36} />
+            <VillageAzaleiaLogo size="sm" />
             <h2 className="text-base font-black text-white">Espaço do Morador</h2>
             <p className="text-[11px] text-white/70 font-medium">Acompanhe suas encomendas em tempo real</p>
           </div>

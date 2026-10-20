@@ -1,50 +1,81 @@
 @import "tailwindcss";
+@import "../design/tokens.css";
 
-@layer utilities {
-  /* Brand Typography */
-  .font-brand {
-    font-family: 'Cinzel', serif;
-  }
-  
-  /* Hide scrollbar */
-  .no-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
-  .no-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-
-  /* Gold & Metallic Gradient highlights */
-  .gold-gradient-text {
-    background: linear-gradient(135deg, #FFF0B3 0%, #D4AF37 50%, #997A15 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-
-  .gold-border-glow {
-    border-color: rgba(212, 175, 55, 0.4);
-    box-shadow: 0 0 12px rgba(212, 175, 55, 0.15);
-  }
+/*
+ * Tema: tokens semânticos (--c-*) derivados da marca. O condomínio pode
+ * sobrescrever primária/secundária/destaque em runtime (src/lib/theme.ts),
+ * só dentro da área dele. Claro/escuro via [data-theme] no <html>.
+ */
+:root {
+  --c-primary: var(--pp-midnight);
+  --c-primary-fg: #ffffff;
+  --c-secondary: var(--pp-heritage);
+  --c-accent: var(--pp-champagne);
+  --c-bg: var(--pp-porcelain);
+  --c-surface: #ffffff;
+  --c-surface-2: #EFECE4;
+  --c-text: var(--pp-ink);
+  --c-muted: var(--pp-slate);
+  --c-border: #DED9CE;
+  --c-success: #126B61;
+  --c-warning: #8A5A00;
+  --c-warning-bg: #FFF4DB;
+  --c-danger: #B42318;
+  --c-danger-bg: #FEECEB;
+  color-scheme: light;
 }
 
-/* Custom scrollbars */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+:root[data-theme="dark"] {
+  --c-primary: #E9E4D8;
+  --c-primary-fg: #101F30;
+  --c-bg: #0B1622;
+  --c-surface: #101F30;
+  --c-surface-2: #17293D;
+  --c-text: #F2EFE8;
+  --c-muted: #A9B4C2;
+  --c-border: #24384F;
+  --c-success: #4FC3B2;
+  --c-warning: #F2C46B;
+  --c-warning-bg: #3A2C10;
+  --c-danger: #FF8A80;
+  --c-danger-bg: #3A1513;
+  color-scheme: dark;
 }
 
-::-webkit-scrollbar-track {
-  background: #061D12;
+@theme inline {
+  --color-primary: var(--c-primary);
+  --color-primary-fg: var(--c-primary-fg);
+  --color-secondary: var(--c-secondary);
+  --color-accent: var(--c-accent);
+  --color-bg: var(--c-bg);
+  --color-surface: var(--c-surface);
+  --color-surface-2: var(--c-surface-2);
+  --color-text: var(--c-text);
+  --color-muted: var(--c-muted);
+  --color-line: var(--c-border);
+  --color-success: var(--c-success);
+  --color-warning: var(--c-warning);
+  --color-warning-bg: var(--c-warning-bg);
+  --color-danger: var(--c-danger);
+  --color-danger-bg: var(--c-danger-bg);
+  --color-midnight: var(--pp-midnight);
+  --color-champagne: var(--pp-champagne);
+  --color-porcelain: var(--pp-porcelain);
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
-::-webkit-scrollbar-thumb {
-  background: #1B5E39;
-  border-radius: 9999px;
+html, body { background: var(--c-bg); color: var(--c-text); }
+body { font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
+
+:focus-visible { outline: 3px solid var(--c-accent); outline-offset: 2px; border-radius: 6px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #D81B60;
+/* Impressão do comprovante: só o recibo. */
+@media print {
+  body * { visibility: hidden; }
+  .print-area, .print-area * { visibility: visible; }
+  .print-area { position: absolute; inset: 0; }
 }
-
-

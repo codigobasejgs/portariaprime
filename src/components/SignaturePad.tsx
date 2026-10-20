@@ -14,7 +14,7 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({
   onSignatureChange,
   height = 180,
   width,
-  penColor = '#0D3823',
+  penColor = '#18283A',
   strokeWidth = 2.5
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -163,7 +163,7 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({
 
   return (
     <div ref={containerRef} className="w-full space-y-2">
-      <div className="relative rounded-2xl bg-white border-2 border-dashed border-[#D4AF37] overflow-hidden shadow-inner touch-none">
+      <div className="relative rounded-2xl bg-white border-2 border-dashed border-line overflow-hidden shadow-inner touch-none">
         <canvas
           ref={canvasRef}
           onMouseDown={startDrawing}
@@ -179,7 +179,7 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({
         {/* Signature guideline line */}
         <div className="absolute bottom-6 left-6 right-6 border-b border-slate-300 pointer-events-none flex items-center justify-between text-[10px] text-slate-400">
           <span className="flex items-center gap-1 font-medium pb-1">
-            <PenTool className="w-3 h-3 text-[#D81B60]" />
+            <PenTool className="w-3 h-3 text-muted" />
             Assine acima com o dedo ou caneta touch
           </span>
           <span className="font-mono text-[9px] pb-1">X</span>
@@ -187,22 +187,22 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({
 
         {/* Badge when signed */}
         {hasSignature && (
-          <div className="absolute top-2 right-2 px-2 py-0.5 rounded-md bg-[#E8F5E9] text-[#0D3823] border border-[#A5D6A7] text-[10px] font-black flex items-center gap-1 shadow-xs pointer-events-none animate-in fade-in">
-            <Check className="w-3 h-3 text-emerald-600" />
+          <div className="absolute top-2 right-2 px-2 py-0.5 rounded-md bg-surface-2 text-success border border-line text-[10px] font-black flex items-center gap-1 shadow-xs pointer-events-none animate-in fade-in">
+            <Check className="w-3 h-3 text-success" />
             <span>Assinatura Capturada</span>
           </div>
         )}
       </div>
 
       <div className="flex items-center justify-between text-xs">
-        <span className="text-[11px] text-slate-500 font-medium">
+        <span className="text-[11px] text-muted font-medium">
           Validade jurídica nos termos do Art. 10 da MP 2.200-2/2001
         </span>
         <button
           type="button"
           onClick={handleClear}
           disabled={!hasSignature}
-          className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] flex items-center gap-1 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          className="px-2.5 py-1 rounded-lg bg-surface-2 hover:bg-line text-text font-bold text-[11px] flex items-center gap-1 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <RotateCcw className="w-3 h-3" />
           <span>Limpar / Refazer</span>

@@ -42,6 +42,13 @@ async function run(request: Request) {
   for (const job of jobs || []) {
     let res: SendResult;
     try {
+      const authorization = await svc.rpc('notification_is_authorized', { p_job: job.id });
+      if (authorization.error) throw new Error('Não foi possível validar o destinatário.');
+      if (authorization.data !== true) {
+        await svc.rpc('complete_notification_job', { p_job: job.id, p_status: 'disabled', p_provider_ref: null, p_error: 'Destinatário sem autorização vigente' });
+        counts[`${job.channel}:disabled`] = (counts[`${job.channel}:disabled`] || 0) + 1;
+        continue;
+      }
       const { data: ctx } = await svc.rpc('notification_context', { p_job: job.id });
       const m: any = render(job.event, ctx, job.payload, base);
       if (job.channel === 'email') {

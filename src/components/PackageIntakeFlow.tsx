@@ -1055,8 +1055,6 @@ export const PackageIntakeFlow: React.FC<PackageIntakeFlowProps> = ({
               <div className="pt-2 border-t border-slate-200">
                 <BarcodeDisplay
                   value={trackingInput || 'ML-894720194BR'}
-                  carrier={selectedCarrier}
-                  showText={true}
                 />
               </div>
             </div>

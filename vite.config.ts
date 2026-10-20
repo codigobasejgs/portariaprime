@@ -1,80 +1,33 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import path from 'path';
-import {defineConfig} from 'vite';
-import {VitePWA} from 'vite-plugin-pwa';
+import path from 'node:path';
+import { defineConfig } from 'vite';
+import { VitePWA } from 'vite-plugin-pwa';
 
-export default defineConfig(() => {
-  return {
-    plugins: [
-      react(),
-      tailwindcss(),
-      VitePWA({
-        registerType: 'autoUpdate',
-        // strategy stays 'generateSW' (default) until real server push exists —
-        // switch to 'injectManifest' then to add a push/notificationclick listener.
-        devOptions: {enabled: true},
-        includeAssets: ['favicon.ico', 'icon-source.svg', 'apple-touch-icon-180x180.png'],
-        manifest: {
-          name: 'Residencial Village Azaleia',
-          short_name: 'Village Azaleia',
-          description:
-            'PWA e Sistema de Gestão Inteligente de Encomendas do Condomínio Residencial Village Azaleia — Portaria, Totem, Morador e Síndico.',
-          theme_color: '#0D3823',
-          // Verde da marca (era #F8F9FA): esta cor pinta a splash screen de abertura do
-          // app instalado. Em branco, dava um "flash" branco antes da tela carregar.
-          background_color: '#0D3823',
-          display: 'standalone',
-          orientation: 'portrait',
-          start_url: '/',
-          lang: 'pt-BR',
-          icons: [
-            {src: 'pwa-64x64.png', sizes: '64x64', type: 'image/png'},
-            {src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png'},
-            {src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png'},
-            {src: 'maskable-icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable'},
-          ],
-        },
-        workbox: {
-          runtimeCaching: [
-            {
-              urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-              handler: 'StaleWhileRevalidate',
-              options: {cacheName: 'google-fonts-stylesheets'},
-            },
-            {
-              urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
-              handler: 'CacheFirst',
-              options: {
-                cacheName: 'google-fonts-webfonts',
-                expiration: {maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365},
-                cacheableResponse: {statuses: [0, 200]},
-              },
-            },
-            {
-              urlPattern: /^https:\/\/images\.unsplash\.com\/.*/i,
-              handler: 'CacheFirst',
-              options: {
-                cacheName: 'sample-package-photos',
-                expiration: {maxEntries: 60, maxAgeSeconds: 60 * 60 * 24 * 30},
-                cacheableResponse: {statuses: [0, 200]},
-              },
-            },
-          ],
-        },
-      }),
-    ],
-    resolve: {
-      alias: {
-        '@': path.resolve(__dirname, '.'),
-      },
+export default defineConfig({
+  plugins: [react(), tailwindcss(), VitePWA({
+    registerType: 'prompt',
+    strategies: 'injectManifest',
+    srcDir: 'src',
+    filename: 'sw.js',
+    includeAssets: ['favicon.ico', 'apple-touch-icon-180x180.png'],
+    manifest: {
+      name: 'Portaria Prime', short_name: 'Portaria Prime',
+      description: 'Cada encomenda. Tudo sob controle.',
+      theme_color: '#101F30', background_color: '#101F30',
+      display: 'standalone', start_url: '/', scope: '/', lang: 'pt-BR',
+      icons: [
+        { src: '/pwa-192x192.png', sizes: '192x192', type: 'image/png' },
+        { src: '/pwa-512x512.png', sizes: '512x512', type: 'image/png' },
+        { src: '/maskable-icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+      ],
     },
-    server: {
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
-      hmr: process.env.DISABLE_HMR !== 'true',
-      // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
-      watch: process.env.DISABLE_HMR === 'true' ? null : {},
-    },
-  };
+    injectManifest: { globPatterns: ['**/*.{js,css,html,png,ico,webmanifest}'] },
+  })],
+  resolve: { alias: { '@': path.resolve(__dirname, '.') } },
+  build: { sourcemap: false },
+  server: {
+    hmr: process.env.DISABLE_HMR !== 'true',
+    watch: process.env.DISABLE_HMR === 'true' ? null : {},
+  },
 });

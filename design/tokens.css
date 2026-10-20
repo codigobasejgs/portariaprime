@@ -1,0 +1,15 @@
+/*
+ * Portaria Prime — tokens de identidade (fonte: design/brand/identidade-visual.png, v1.0)
+ * O kit entregue contém PNGs (sem SVG/GUIA_IDENTIDADE.md); cores extraídas do guia.
+ * Regras do guia: símbolo = portal envolvendo P; versão principal em fundo claro,
+ * negativa em fundo escuro; champagne NÃO é usado como texto pequeno em fundo claro.
+ */
+:root {
+  --pp-midnight: #101F30;   /* azul meia-noite */
+  --pp-champagne: #C8AB78;  /* champagne */
+  --pp-porcelain: #F7F5F0;  /* porcelana */
+  --pp-slate: #526174;      /* ardósia */
+  --pp-heritage: #126B61;   /* verde patrimônio */
+  --pp-ink: #18283A;        /* tinta */
+  --pp-tagline: "Cada encomenda. Tudo sob controle.";
+}

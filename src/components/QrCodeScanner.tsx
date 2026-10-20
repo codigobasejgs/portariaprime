@@ -89,22 +89,22 @@ export const QrCodeScanner: React.FC<QrCodeScannerProps> = ({ onDecode, onClose 
   }, []);
 
   return (
-    <div className="rounded-2xl overflow-hidden border-2 border-[#D4AF37]/50 bg-black relative">
-      <div className="flex items-center justify-between px-3 py-2 bg-[#0D3823] text-white">
+    <div className="rounded-2xl overflow-hidden border-2 border-line bg-black relative">
+      <div className="flex items-center justify-between px-3 py-2 bg-midnight text-porcelain">
         <span className="text-xs font-bold flex items-center gap-1.5">
-          <Camera className="w-3.5 h-3.5 text-[#D4AF37]" />
+          <Camera className="w-3.5 h-3.5 text-champagne" />
           Aponte a câmera para o QR do morador
         </span>
-        <button type="button" onClick={onClose} className="p-1 rounded hover:bg-white/10">
+        <button type="button" onClick={onClose} className="p-1 rounded hover:bg-surface/10">
           <X className="w-4 h-4" />
         </button>
       </div>
 
       {hasCameraPermission === false ? (
-        <div className="p-6 text-center space-y-2 bg-white">
-          <AlertTriangle className="w-8 h-8 text-amber-500 mx-auto" />
-          <p className="text-xs text-slate-600 font-semibold">
-            Câmera indisponível ou sem permissão. Digite o código no campo abaixo.
+        <div className="p-6 text-center space-y-2 bg-surface">
+          <AlertTriangle className="w-8 h-8 text-warning mx-auto" />
+          <p className="text-xs text-muted font-semibold">
+            Câmera indisponível ou sem permissão. Use a retirada manual com justificativa.
           </p>
         </div>
       ) : (
@@ -112,7 +112,7 @@ export const QrCodeScanner: React.FC<QrCodeScannerProps> = ({ onDecode, onClose 
           <video ref={videoRef} className="w-full h-full object-cover" muted playsInline />
           <canvas ref={canvasRef} className="hidden" />
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="w-2/3 aspect-square border-2 border-[#D81B60] rounded-2xl shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
+            <div className="w-2/3 aspect-square border-2 border-champagne rounded-2xl shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
           </div>
         </div>
       )}

@@ -10,3 +10,9 @@ coverage/
 
 # Backups de auditoria (contem dados pessoais e hashes)
 backups/
+
+# Protótipo antigo com credenciais fictícias fixas; mantido só localmente
+docs/legado/prototipo-portaria-prime-index.jsx
+docs/legado/readme-prototipo.txt
+# Evidências de teste geradas
+tests/evidence/

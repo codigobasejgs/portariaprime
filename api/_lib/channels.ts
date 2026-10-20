@@ -57,7 +57,13 @@ export function vapidConfigured(): boolean {
   return true;
 }
 
+/** Lista fechada: rejeita destinos internos e hosts controlados pelo assinante. */
+export function validPushEndpoint(endpoint: string): boolean {
+  return /^https:\/\/(fcm\.googleapis\.com|updates\.push\.services\.mozilla\.com|web\.push\.apple\.com|[a-z0-9-]+\.notify\.windows\.com)\/[^\s#]*$/.test(endpoint);
+}
+
 export async function sendPush(sub: { endpoint: string; p256dh: string; auth: string }, payload: object): Promise<SendResult> {
+  if (!validPushEndpoint(sub.endpoint)) return { status: 'disabled', error: 'Destino push não autorizado', gone: true };
   if (!vapidConfigured()) return { status: 'disabled', error: 'VAPID não configurado' };
   try {
     const r = await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },

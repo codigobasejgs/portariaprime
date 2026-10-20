@@ -11,7 +11,7 @@ import './index.css';
 registerSW({
   immediate: true,
   onNeedRefresh() {
-    window.dispatchEvent(new CustomEvent('village-azaleia:pwa-update-ready'));
+    window.dispatchEvent(new CustomEvent('portaria-prime:pwa-update-ready'));
   },
 });
 
