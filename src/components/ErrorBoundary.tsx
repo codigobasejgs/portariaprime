@@ -36,20 +36,18 @@ export class ErrorBoundary extends React.Component<Props, State> {
     if (this.state.hasError) {
       return (
         <div className="min-h-[50vh] flex items-center justify-center p-6">
-          <div className="bg-white border-2 border-rose-300 rounded-3xl p-8 max-w-md w-full text-center space-y-4 shadow-xl">
-            <div className="w-14 h-14 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
-              <AlertTriangle className="w-8 h-8" />
+          <div role="alert" className="bg-surface border border-line rounded-2xl p-8 max-w-md w-full text-center space-y-4">
+            <div className="w-14 h-14 rounded-2xl bg-danger-bg text-danger flex items-center justify-center mx-auto">
+              <AlertTriangle className="w-8 h-8" aria-hidden />
             </div>
-            <h3 className="text-lg font-black text-[#0D3823]">
+            <h1 className="text-lg font-semibold text-text">
               {this.props.fallbackTitle || 'Ocorreu um erro ao carregar esta tela'}
-            </h3>
-            <p className="text-xs text-slate-600 bg-slate-50 p-3 rounded-xl font-mono text-left break-all">
-              {this.state.error?.message || 'Erro inesperado em tempo de execução.'}
-            </p>
+            </h1>
+            <p className="text-sm text-muted">Recarregue a página. Se continuar, avise o administrador do condomínio.</p>
             <button
               type="button"
               onClick={() => window.location.reload()}
-              className="px-6 py-2.5 rounded-xl bg-[#0D3823] text-white font-extrabold text-xs flex items-center gap-2 mx-auto hover:bg-[#15462D] transition-colors"
+              className="min-h-11 px-6 rounded-xl bg-primary text-primary-fg font-semibold text-sm inline-flex items-center gap-2"
             >
               <RefreshCw className="w-4 h-4" />
               <span>Recarregar Página</span>

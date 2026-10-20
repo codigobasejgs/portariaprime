@@ -1,20 +1,13 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# Portaria Prime
 
-# Run and deploy your AI Studio app
+Gestão de encomendas para condomínios — multi-condomínio, com portaria, morador, totem, painel do síndico e assinatura com mês grátis.
 
-This contains everything you need to run your app locally.
+```
+npm ci
+npm run typecheck
+npm test          # banco (PGlite) + contratos de API
+npm run build
+npm run dev       # só interface; APIs exigem `npm run dev:full` (vercel dev)
+```
 
-View your app in AI Studio: https://ai.studio/apps/33cb472b-130f-4975-a8cc-72b6b8625fc6
-
-## Run Locally
-
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+Configuração: `.env.example`. Implantação: `docs/DEPLOY.md`. Situação real: `docs/IMPLEMENTACAO_STATUS.md` e `docs/QA_RESULTADOS.md`.

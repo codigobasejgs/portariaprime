@@ -1,6 +1,0 @@
-{
-  "name": "Village Azaleia - Gestão Inteligente de Encomendas",
-  "description": "PWA e Sistema de Gestão Inteligente de Encomendas para o Condomínio Residencial Village Azaleia com Portaria, Totem, PWA do Morador e Dashboard Síndico.",
-  "requestFramePermissions": ["camera"],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
