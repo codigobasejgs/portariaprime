@@ -1,0 +1,30 @@
+# Envia a fila de avisos e processa cobrança a cada ~10 min.
+# Necessário porque o plano Hobby da Vercel só permite cron diário.
+# Configure em Settings > Secrets and variables > Actions:
+#   APP_URL      (ex.: https://seu-dominio)
+#   CRON_SECRET  (o mesmo valor configurado na Vercel)
+# Sem esses segredos o job apenas avisa e termina sem erro.
+# O GitHub pode atrasar execuções agendadas em horários de pico.
+name: tick
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+permissions: {}
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Chamar /api/jobs/tick
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "::warning::APP_URL ou CRON_SECRET não configurados; nada executado."
+            exit 0
+          fi
+          curl --fail-with-body -sS -m 60 -X POST \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_URL/api/jobs/tick"

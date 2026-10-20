@@ -33,7 +33,7 @@ Validar exports Web Request/Response no runtime Vercel antes do deploy. `vite bu
 
 - Webhook: `POST APP_URL/api/webhooks/infinitepay`.
 - Scheduler externo autenticado: `POST APP_URL/api/jobs/tick`, header `Authorization: Bearer CRON_SECRET`.
-- `GET` equivalente está disponível para Vercel Cron. Frequência e orçamento de execução ainda precisam de configuração/homologação. Não há cron publicado nesta sessão.
+- `GET` equivalente está disponível para Vercel Cron. Hobby: cron diário em `vercel.json` + GitHub Actions a cada ~10 min (`.github/workflows/tick.yml`, secrets `APP_URL` e `CRON_SECRET`). Detalhes em `OPERACAO_E_BACKUP.md`.
 - Configure fallback SPA somente para rotas de interface, nunca reescrevendo `/api/*` para HTML.
 
 Comandos de publicação e aplicações remotas de migrations exigem autorização específica. Nada foi publicado.

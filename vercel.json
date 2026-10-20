@@ -19,5 +19,5 @@
     { "source": "/sw.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
     { "source": "/api/(.*)", "headers": [{ "key": "Cache-Control", "value": "no-store" }] }
   ],
-  "crons": [{ "path": "/api/jobs/tick", "schedule": "*/10 * * * *" }]
+  "crons": [{ "path": "/api/jobs/tick", "schedule": "17 9 * * *" }]
 }
