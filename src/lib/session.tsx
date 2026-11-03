@@ -76,8 +76,16 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     let timer: ReturnType<typeof setTimeout>;
+    let currentUser: string | null | undefined;
     const { data } = supabase.auth.onAuthStateChange((event, s) => {
-      if (event === 'TOKEN_REFRESHED') return setSession(s);
+      // Ao voltar para a aba, o Supabase Auth reemite SIGNED_IN com a MESMA sessão. Tratar isso como login
+      // novo zerava o contexto e remontava o app (formulários e filtros perdidos, tela piscando).
+      // Mesmo usuário = só troca o token; usuário diferente, login ou logout = recarrega o contexto.
+      const uid = s?.user?.id ?? null;
+      if (event === 'TOKEN_REFRESHED' || ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && uid && uid === currentUser)) {
+        return setSession(s);
+      }
+      currentUser = uid;
       clearTimeout(timer);
       // Consultas fora do callback evitam disputar o lock interno do Supabase Auth.
       timer = setTimeout(() => { void load(s); }, 0);
