@@ -21,7 +21,8 @@ export function fromHeader(base: string, displayName?: string | null): string {
   return name ? `"${name} via Portaria Prime" <${addr}>` : base;
 }
 
-export async function sendEmail(to: string, subject: string, html: string, attachment?: Attachment, senderName?: string | null): Promise<SendResult> {
+export async function sendEmail(to: string, subject: string, html: string, attachment?: Attachment, senderName?: string | null,
+  opts: { text?: string; idempotencyKey?: string } = {}): Promise<SendResult> {
   const key = optionalEnv('RESEND_API_KEY');
   const base = optionalEnv('RESEND_FROM_EMAIL');
   if (!key || !base) return { status: 'disabled', error: 'Resend não configurado' };
@@ -29,13 +30,15 @@ export async function sendEmail(to: string, subject: string, html: string, attac
   try {
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-      body: JSON.stringify({ from, to: [to], subject, html,
+      // Idempotency-Key: o mesmo job reenviado (retry após timeout) não vira e-mail duplicado no Resend.
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}`, ...(opts.idempotencyKey ? { 'Idempotency-Key': opts.idempotencyKey } : {}) },
+      body: JSON.stringify({ from, to: [to], subject, html, ...(opts.text ? { text: opts.text } : {}),
         ...(attachment ? { attachments: [{ filename: attachment.filename, content: Buffer.from(attachment.content).toString('base64') }] } : {}) }),
       signal: AbortSignal.timeout(15000),
     });
     const d: any = await r.json().catch(() => ({}));
-    return r.ok ? { status: 'accepted', ref: d.id } : { status: 'failed', error: `Resend HTTP ${r.status}` };
+    // 422 = endereço/campos recusados: não adianta repetir.
+    return r.ok ? { status: 'accepted', ref: d.id } : { status: 'failed', error: `Resend HTTP ${r.status}`, permanent: r.status === 422 };
   } catch (e: any) {
     return { status: 'failed', error: e?.message || 'rede' };
   }

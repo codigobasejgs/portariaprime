@@ -10,10 +10,16 @@ import { handler, json, safeEqual, HttpError } from '../_lib/http.js';
 import { env, appUrl, optionalEnv } from '../_lib/env.js';
 import { serviceClient } from '../_lib/supabase.js';
 import { verifyAndApply } from '../_lib/payments.js';
-import { render, emailHtml } from '../_lib/templates.js';
+import { render, emailHtml, emailText } from '../_lib/templates.js';
 import { sendEmail, sendWhatsApp, sendWhatsAppDocument, sendPush, whatsAppState, SendResult, Attachment } from '../_lib/channels.js';
 import { renderReceiptPdf, RECEIPT_TEMPLATE_VERSION } from '../_lib/receipt-pdf.js';
 import { createHash } from 'node:crypto';
+
+/** URL pública do logo no bucket público do condomínio (caminho vem do banco; nunca do navegador). */
+export function publicLogo(path: string) {
+  const sb = optionalEnv('SUPABASE_URL') || optionalEnv('NEXT_PUBLIC_SUPABASE_URL');
+  return sb && /^[0-9a-f-]{36}\/[A-Za-z0-9._\/-]+$/.test(path) ? `${sb.replace(/\/$/, '')}/storage/v1/object/public/tenant-public/${path}` : null;
+}
 
 /** Baixa um objeto do Storage pelo backend (sem URL pública); ausente = null. */
 async function download(svc: any, bucket: string, path: string | null | undefined) {
@@ -108,7 +114,9 @@ async function run(request: Request) {
         counts[`${job.channel}:disabled`] = (counts[`${job.channel}:disabled`] || 0) + 1;
         continue;
       }
-      const { data: ctx } = await svc.rpc('notification_context', { p_job: job.id });
+      const { data: rawCtx } = await svc.rpc('notification_context', { p_job: job.id });
+      // Identidade visual sempre do tenant do job (resolvida no banco); logo vira URL pública absoluta aqui.
+      const ctx = { ...rawCtx, logo_url: rawCtx?.logo_path ? publicLogo(rawCtx.logo_path) : null };
       const m: any = render(job.event, ctx, job.payload, base);
       // Retirada: canais com anexo exigem o PDF pronto (o job só sai de "hold" depois dele).
       let pdf: Attachment | null = null;
@@ -131,12 +139,16 @@ async function run(request: Request) {
       if (job.channel === 'email') {
         // Avisos do condomínio saem com o nome dele; cobrança, suporte e contrato são da Portaria Prime.
         const own = !/^(trial_reminder|billing_order|billing_paid|support_reply|quote_sent|contract_copy)$/.test(job.event);
-        res = await sendEmail(job.recipient, m.subject, emailHtml(ctx, m), pdf || undefined, own ? ctx?.tenant_name : null);
-      } else if (job.channel === 'whatsapp' && job.event === 'portal_welcome') {
-        // Condomínio recém-criado ainda não tem WhatsApp: usa o canal da plataforma, se configurado.
+        res = await sendEmail(job.recipient, m.subject, emailHtml(ctx, m), pdf || undefined, own ? ctx?.tenant_name : null,
+          { text: emailText(ctx, m), idempotencyKey: `job-${job.id}` });
+      } else if (job.channel === 'whatsapp' && (job.event === 'portal_welcome'
+        || ((job.event === 'access_received' || job.event === 'access_decision') && !(ctx.whatsapp?.enabled && ctx.whatsapp.instance)))) {
+        // Sem WhatsApp do condomínio (recém-criado ou não conectado): canal central da plataforma, se configurado.
+        // Nunca simula envio: sem canal, o job fica "disabled" com o motivo.
         const platform = optionalEnv('PLATFORM_WHATSAPP_INSTANCE');
-        res = platform ? await sendWhatsApp(platform, job.recipient, m.whatsapp)
-          : { status: 'disabled', error: 'WhatsApp da plataforma não configurado' };
+        if (!m.whatsapp) res = { status: 'disabled', error: 'Evento sem mensagem de WhatsApp' };
+        else res = platform ? await sendWhatsApp(platform, job.recipient, m.whatsapp)
+          : { status: 'disabled', error: 'WhatsApp não conectado neste condomínio e canal da plataforma não configurado' };
       } else if (job.channel === 'whatsapp') {
         const wa = ctx.whatsapp;
         if (!wa?.enabled || !wa.instance) res = { status: 'disabled', error: 'WhatsApp não conectado neste condomínio' };
