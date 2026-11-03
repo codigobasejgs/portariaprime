@@ -14,7 +14,7 @@ export function decryptBackup(text, passphrase) {
 }
 
 // Ordem respeitando FKs; tabelas não listadas vão ao fim.
-const ORDER = ['plans', 'plan_prices', 'plan_entitlements', 'tenants', 'profiles', 'platform_admins', 'tenant_memberships',
+const ORDER = ['plans', 'plan_prices', 'plan_entitlements', 'privacy_terms_global', 'tenants', 'profiles', 'platform_admins', 'tenant_memberships',
   'tenant_branding', 'tenant_settings', 'tenant_integrations', 'units', 'unit_memberships', 'resident_contacts', 'invitations',
   'concierge_locations', 'storage_locations', 'device_enrollments', 'subscriptions', 'trial_eligibility', 'billing_orders',
   'payments', 'payment_events', 'billing_incidents', 'usage_counters', 'packages', 'package_events', 'package_attachments',
@@ -31,7 +31,7 @@ export async function restoreInto(db, bundle) {
   try {
     // Tabelas semeadas por migration (catálogo e configuração comercial) são substituídas pelo backup.
     // audit_logs: migrations também auditam (ex.: desconto por ciclo); o histórico real vem do backup.
-    const seeded = ['plan_price_drafts', 'commercial_costs', 'commercial_scenarios', 'quote_policy', 'mdm_app_catalog', 'audit_logs', 'plan_entitlements', 'plan_prices', 'plans', 'profiles'];
+    const seeded = ['plan_price_drafts', 'commercial_costs', 'commercial_scenarios', 'quote_policy', 'mdm_app_catalog', 'audit_logs', 'plan_entitlements', 'plan_prices', 'plans', 'profiles', 'privacy_terms_global'];
     for (const t of seeded) if (t in bundle.tables || ['plan_entitlements', 'plan_prices', 'plans', 'profiles'].includes(t)) await db.raw.exec(`delete from public.${t}`);
     const tables = [...ORDER.filter((t) => t in bundle.tables), ...Object.keys(bundle.tables).filter((t) => !ORDER.includes(t))];
     for (const t of tables) {

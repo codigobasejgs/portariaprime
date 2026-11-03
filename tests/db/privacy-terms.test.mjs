@@ -35,13 +35,14 @@ test('termo LGPD: versões, aceite obrigatório no servidor, aprovação e isola
       } catch (e) { await db.raw.exec('rollback'); throw e; }
     };
     void fresh;
-    const send = (uid, slug, hash) => db.rpc(uid, 'request_access', { p_slug: slug, p_full_name: 'Maria Moradora', p_phone: null, p_block: 'A', p_unit: '101', p_privacy_hash: hash });
+    const send = (uid, slug, hash) => db.rpc(uid, 'request_access', { p_slug: slug, p_full_name: 'Maria Moradora', p_phone: '11988887777', p_block: 'A', p_unit: '101', p_privacy_hash: hash });
 
-    // 1) Sem termo publicado: não há termo público e o cadastro é recusado no servidor.
-    assert.equal(await db.rpc(null, 'privacy_term_current', { p_slug: 'lgpd-a' }), null);
-    await assert.rejects(send(mor, 'lgpd-a', 'qualquer'), /ainda não publicou o termo/);
-    await assert.rejects(db.rpc(mor, 'request_access', { p_slug: 'lgpd-a', p_full_name: 'Maria', p_phone: null, p_block: 'A', p_unit: '101' }), /ainda não publicou o termo/,
-      'assinatura antiga (app em cache) também é barrada');
+    // 1) Sem termo do condomínio vale o GLOBAL da plataforma (20261103000600); o envio exige o hash dele.
+    const g = await db.rpc(null, 'privacy_term_current', { p_slug: 'lgpd-a' });
+    assert.equal(g.scope, 'global');
+    await assert.rejects(send(mor, 'lgpd-a', 'qualquer'), /aceite o termo/);
+    await assert.rejects(db.rpc(mor, 'request_access', { p_slug: 'lgpd-a', p_full_name: 'Maria Moradora', p_phone: '11988887777', p_block: 'A', p_unit: '101' }), /aceite o termo/,
+      'assinatura antiga (app em cache, sem hash) é barrada');
 
     // 2) Permissões: porteiro e morador não editam; síndico de B não edita A; rascunho editável.
     await assert.rejects(db.rpc(porteiro, 'privacy_term_save', { p_tenant: A, p_id: null, p_version: '1.0', p_title: 'Termo', p_content: TEXT, p_note: null }), /Somente/);
@@ -58,7 +59,10 @@ test('termo LGPD: versões, aceite obrigatório no servidor, aprovação e isola
     await assert.rejects(db.sql('delete from privacy_terms where id=$1', [d1.id]), /não pode ser apagada/);
     const cur = await db.rpc(null, 'privacy_term_current', { p_slug: 'lgpd-a' });
     assert.equal(cur.version, '1.0');
-    assert.equal(await db.rpc(null, 'privacy_term_current', { p_slug: 'lgpd-b' }), null, 'termo de A não aparece em B');
+    assert.equal(cur.scope, 'tenant', 'termo do condomínio prevalece sobre o global');
+    const curB = await db.rpc(null, 'privacy_term_current', { p_slug: 'lgpd-b' });
+    assert.equal(curB.scope, 'global', 'termo de A não aparece em B (B segue no global)');
+    assert.ok(!curB.content.includes(TEXT));
 
     // 4) Envio: hash errado/ausente recusado (sem pedido criado); hash certo grava pedido + aceite na mesma transação.
     await assert.rejects(send(mor, 'lgpd-a', null), /aceite o termo/);
