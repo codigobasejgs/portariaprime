@@ -14,6 +14,7 @@ import { RemindersCard } from './config/RemindersCard';
 import { SecurityCard } from './config/SecurityCard';
 import { CondoCard } from './config/CondoCard';
 import { DevicesCard } from './config/DevicesCard';
+import { PrivacyTermCard } from './config/PrivacyTermCard';
 
 type T = ReturnType<typeof useTenant>;
 interface Mod { id: string; title: string; desc: string; keys: string; allowed: (t: T) => boolean; render: (t: T) => React.ReactNode }
@@ -47,6 +48,8 @@ export const MODULES: Mod[] = [
     allowed: settings, render: () => <DevicesCard /> },
   { id: 'plano', title: 'Plano e assinatura', desc: 'Mês grátis, plano, limites e pagamentos.', keys: 'assinatura plano pagamento cobranca teste gratis fatura pix cartao',
     allowed: (t) => t.can('billing'), render: () => <AssinaturaPage embedded /> },
+  { id: 'privacidade', title: 'Privacidade e LGPD', desc: 'Termo de ciência do morador: versões, publicação e registros de aceite.', keys: 'lgpd privacidade termo aceite dados pessoais consentimento ciencia',
+    allowed: (t) => settings(t) || t.can('approve'), render: () => <PrivacyTermCard /> },
   { id: 'seguranca', title: 'Segurança e auditoria', desc: 'Histórico de ações e sessão deste aparelho.', keys: 'seguranca auditoria historico sessao sair log',
     allowed: (t) => t.link.role === 'admin', render: () => <SecurityCard /> },
 ];

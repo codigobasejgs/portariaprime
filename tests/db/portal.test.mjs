@@ -35,19 +35,28 @@ test('portal, solicitação, aprovação/recusa, isolamento e boas-vindas', asyn
     assert.deepEqual(Object.keys(pub).sort(), ['color_accent', 'color_primary', 'color_secondary', 'icons_version', 'logo_path', 'name', 'slug', 'status', 'tenant_id']);
     assert.equal(await db.rpc(null, 'portal_info', { p_slug: 'nao-existe' }), null);
 
+    // Termo de dados (20261103000100): sem termo publicado o cadastro é recusado; com termo, exige o hash vigente.
+    await assert.rejects(db.rpc(mor, 'request_access', { p_slug: 'portal-a', p_full_name: 'Maria', p_phone: null, p_block: 'A', p_unit: '12B' }), /ainda não publicou o termo/);
+    // Publica um termo no condomínio (direto no banco: a publicação pela RPC exige senha recente, testada em privacy-terms.test).
+    const publishTerm = async (tenant, slug) => {
+      await db.sql("insert into privacy_terms (tenant_id, version, title, content, content_hash) values ($1, '1.0', 'Termo de dados', $2, '')", [tenant, 'x'.repeat(60)]);
+      await db.sql("update privacy_terms set status='published', published_at=now(), effective_at=now() where tenant_id=$1", [tenant]);
+      return (await db.rpc(null, 'privacy_term_current', { p_slug: slug })).hash;
+    };
+    const termA = { hash: await publishTerm(A, 'portal-a') };
     // Solicitação: anônimo não; sem e-mail verificado não; pendente não vê nada.
-    await assert.rejects(db.rpc(null, 'request_access', { p_slug: 'portal-a', p_full_name: 'X', p_phone: null, p_block: null, p_unit: '1' }), /permission denied|login/);
+    await assert.rejects(db.rpc(null, 'request_access', { p_slug: 'portal-a', p_full_name: 'X', p_phone: null, p_block: null, p_unit: '1', p_privacy_hash: termA.hash }), /permission denied|login/);
     const naoverif = await db.createUser('naoverif@portal.invalid', { verified: false });
-    await assert.rejects(db.rpc(naoverif, 'request_access', { p_slug: 'portal-a', p_full_name: 'Nome', p_phone: null, p_block: null, p_unit: '1' }), /Confirme/);
-    const r1 = await db.rpc(mor, 'request_access', { p_slug: 'portal-a', p_full_name: 'Maria Teste', p_phone: '(11) 98888-7777', p_block: 'Bloco A', p_unit: 'Apto 12B' });
-    const r2 = await db.rpc(mor, 'request_access', { p_slug: 'portal-a', p_full_name: 'Maria Teste', p_phone: null, p_block: 'A', p_unit: '12B' });
+    await assert.rejects(db.rpc(naoverif, 'request_access', { p_slug: 'portal-a', p_full_name: 'Nome', p_phone: null, p_block: null, p_unit: '1', p_privacy_hash: termA.hash }), /Confirme/);
+    const r1 = await db.rpc(mor, 'request_access', { p_slug: 'portal-a', p_full_name: 'Maria Teste', p_phone: '(11) 98888-7777', p_block: 'Bloco A', p_unit: 'Apto 12B', p_privacy_hash: termA.hash });
+    const r2 = await db.rpc(mor, 'request_access', { p_slug: 'portal-a', p_full_name: 'Maria Teste', p_phone: null, p_block: 'A', p_unit: '12B', p_privacy_hash: termA.hash });
     assert.equal(r1.request_id, r2.request_id, 'retry não duplica');
     const [row] = await db.sql('select unit_id, status from access_requests where id=$1', [r1.request_id]);
     assert.deepEqual([row.unit_id, row.status], [unitA, 'pending'], 'normaliza "Bloco A" e "Apto 12B"');
     assert.equal((await db.as(mor, 'select * from units')).length, 0);
     assert.equal((await db.as(mor, 'select * from tenant_memberships where tenant_id=$1', [A])).length, 0);
     // Unidade digitada inexistente não é criada.
-    const ro = await db.rpc(outro, 'request_access', { p_slug: 'portal-a', p_full_name: 'Outro', p_phone: null, p_block: null, p_unit: '777' });
+    const ro = await db.rpc(outro, 'request_access', { p_slug: 'portal-a', p_full_name: 'Outro', p_phone: null, p_block: null, p_unit: '777', p_privacy_hash: termA.hash });
     assert.equal((await db.sql('select unit_id from access_requests where id=$1', [ro.request_id]))[0].unit_id, null);
     assert.equal((await db.sql("select count(*)::int n from units where tenant_id=$1 and label='777'", [A]))[0].n, 0);
     // Síndico avisado; morador não vê a solicitação de outro.
@@ -75,20 +84,21 @@ test('portal, solicitação, aprovação/recusa, isolamento e boas-vindas', asyn
     assert.equal((await db.rpc(outro, 'my_access_request', { p_slug: 'portal-a' })).status, 'rejected');
 
     // Mesma conta pede vínculo em B sem novo usuário; acesso em A não vale em B.
-    await db.rpc(mor, 'request_access', { p_slug: 'portal-b', p_full_name: 'Maria Teste', p_phone: null, p_block: null, p_unit: '1' });
+    const hashB = await publishTerm(B, 'portal-b');
+    await db.rpc(mor, 'request_access', { p_slug: 'portal-b', p_full_name: 'Maria Teste', p_phone: null, p_block: null, p_unit: '1', p_privacy_hash: hashB });
     assert.equal((await db.sql("select count(*)::int n from auth.users where email='morador@portal.invalid'"))[0].n, 1);
     assert.equal((await db.as(mor, 'select * from units where tenant_id=$1', [B])).length, 0);
     // Já morador em A: nova solicitação recusada.
-    await assert.rejects(db.rpc(mor, 'request_access', { p_slug: 'portal-a', p_full_name: 'Maria', p_phone: null, p_block: null, p_unit: '1' }), /já tem acesso/);
+    await assert.rejects(db.rpc(mor, 'request_access', { p_slug: 'portal-a', p_full_name: 'Maria', p_phone: null, p_block: null, p_unit: '1', p_privacy_hash: termA.hash }), /já tem acesso/);
     // Limite de abuso.
     const spam = await db.createUser('spam@portal.invalid');
     for (let i = 0; i < 5; i++) {
       const s = await db.rpc(adminB, 'provision_tenant', { p_request_id: uuid(), p_name: `S${i}`, p_slug: `spam-${i}`, p_document: `1000000000000${i}`.slice(-14),
         p_timezone: 'America/Sao_Paulo', p_plan_code: 'prime', p_cycle: 'monthly' }).catch(() => null);
-      if (s) await db.rpc(spam, 'request_access', { p_slug: `spam-${i}`, p_full_name: 'Spam', p_phone: null, p_block: null, p_unit: '1' });
+      if (s) await db.rpc(spam, 'request_access', { p_slug: `spam-${i}`, p_full_name: 'Spam', p_phone: null, p_block: null, p_unit: '1', p_privacy_hash: await publishTerm(s.tenant_id, `spam-${i}`) });
     }
     const spamCount = (await db.sql('select count(*)::int n from access_requests where user_id=$1', [spam]))[0].n;
-    if (spamCount === 5) await assert.rejects(db.rpc(spam, 'request_access', { p_slug: 'portal-b', p_full_name: 'Spam', p_phone: null, p_block: null, p_unit: '1' }), /Muitas/);
+    if (spamCount === 5) await assert.rejects(db.rpc(spam, 'request_access', { p_slug: 'portal-b', p_full_name: 'Spam', p_phone: null, p_block: null, p_unit: '1', p_privacy_hash: hashB }), /Muitas/);
 
     // Reenvio das boas-vindas: só "settings", com intervalo.
     await assert.rejects(db.rpc(porteiro, 'resend_portal_welcome', { p_tenant: A }), /permissão/i);

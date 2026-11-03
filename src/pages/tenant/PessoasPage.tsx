@@ -384,6 +384,10 @@ function AccessRequests({ units, onDecided }: { units: UnitRow[]; onDecided: () 
               <p><strong>{r.full_name}</strong> <span className="text-muted">{r.email}{r.phone ? ` · ${r.phone}` : ''}</span></p>
               <p>Informou: <strong>{[r.block_text, r.unit_text].filter(Boolean).join(' ')}</strong> · {new Date(r.created_at).toLocaleString('pt-BR')}
                 {r.status !== 'pending' && <> · <Badge tone={r.status === 'approved' ? 'success' : 'danger'}>{r.status === 'approved' ? 'aprovada' : 'recusada'}</Badge>{r.reason ? ` ${r.reason}` : ''}</>}</p>
+              <p>{r.privacy_version
+                ? <Badge tone="success">Termo de dados {r.privacy_version} aceito em {new Date(r.privacy_accepted_at).toLocaleString('pt-BR')}</Badge>
+                : <Badge tone="warning">Sem aceite do termo de dados registrado</Badge>}
+                {!r.privacy_version && r.status === 'pending' && <span className="block text-xs text-muted mt-1">Pedidos enviados depois da publicação do termo só podem ser aprovados com o aceite. Recusar continua possível.</span>}</p>
               {r.status === 'pending' && (
                 <div className="flex flex-wrap items-end gap-2">
                   <Field label={r.unit_id ? 'Unidade (encontrada)' : 'Unidade não encontrada: escolha'}>

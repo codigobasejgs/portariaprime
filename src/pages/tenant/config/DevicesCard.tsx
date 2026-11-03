@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ShieldCheck, RefreshCw, Wrench, Power, Wifi, KeyRound, QrCode, Plus, Trash2 } from 'lucide-react';
-import { supabase } from '../../../lib/supabase';
+import { useSensitive } from '../../../components/Reauth';
 import { rpc, newKey } from '../../../lib/api';
 import { useTenant } from '../../../lib/tenant';
 import { dateTime } from '../../../lib/format';
@@ -14,39 +14,7 @@ import { COMMAND_LABEL, COMMAND_STATUS, DEVICE_LIMIT, DEVICE_LIMIT_MSG, LOCK_FEA
  * Ações sensíveis pedem a senha de novo (o banco exige login recente; MFA se cadastrado).
  */
 
-// Repete a ação depois de confirmar a senha quando o banco pede reautenticação.
-function useSensitive() {
-  const [pending, setPending] = useState<null | (() => Promise<void>)>(null);
-  const guard = (fn: () => Promise<void>) => async () => {
-    try { await fn(); } catch (e: any) {
-      if (/Confirme sua senha/.test(e?.message || '')) setPending(() => fn); else throw e;
-    }
-  };
-  const dialog = pending && <ReauthModal onClose={() => setPending(null)} onDone={async () => { const f = pending; setPending(null); await f(); }} />;
-  return { guard, dialog };
-}
-
-function ReauthModal({ onClose, onDone }: { onClose: () => void; onDone: () => Promise<void> }) {
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const { busy, run } = useAction();
-  return (
-    <Modal title="Confirme sua senha" onClose={onClose}>
-      <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); run(async () => {
-        const { data } = await supabase.auth.getUser();
-        const email = data.user?.email;
-        if (!email) throw new Error('Sessão sem e-mail. Entre novamente.');
-        const { error: err } = await supabase.auth.signInWithPassword({ email, password });
-        if (err) { setError('Senha incorreta.'); return; }
-        await onDone();
-      }); }}>
-        <p className="text-sm text-muted">Ações que alteram ou liberam aparelhos gerenciados exigem confirmação recente da sua identidade.</p>
-        <Field label="Senha" error={error}><Input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></Field>
-        <Button type="submit" loading={busy}>Confirmar</Button>
-      </form>
-    </Modal>
-  );
-}
+const DEVICE_REAUTH = 'Ações que alteram ou liberam aparelhos gerenciados exigem confirmação recente da sua identidade.';
 
 export function DevicesCard() {
   const t = useTenant();
@@ -155,7 +123,7 @@ function DeviceDetail({ id, policies, release, onClose }: { id: string; policies
   const [d, setD] = useState<any>(null);
   const [panel, setPanel] = useState<string | null>(null);
   const { busy, run } = useAction();
-  const { guard, dialog } = useSensitive();
+  const { guard, dialog } = useSensitive(DEVICE_REAUTH);
   const load = useCallback(async () => setD(await rpc('mdm_device_detail', { p_device: id })), [id]);
   useEffect(() => { load().catch((e) => toast.error(e.message)); }, [load]);
   const command = (action: string, params: any = {}, secret: string | null = null, ok?: string) => run(guard(async () => {
