@@ -30,6 +30,15 @@ test('RPCs novas: definer + search_path, sem anon, matriz de papéis e injeção
        and p.proname in ('dash_packages', 'dash_check_period', 'divulgacao_valid', 'onboarding_tenant', 'privacy_term_default', 'privacy_term_guard', 'privacy_ack_guard')`);
     assert.equal(internal.length, 7);
     for (const f of internal) assert.ok(!f.auth_exec && !f.anon_exec, `app.${f.proname} fechado`);
+    // No Supabase hospedado, tabelas novas em public herdam ALL (inclusive TRUNCATE, que o RLS não barra)
+    // para anon/authenticated. O PGlite não tem esse padrão: reproduz e confirma que a 0500 limpa.
+    await db.raw.exec('grant all on public.access_requests, public.privacy_terms, public.privacy_acknowledgements to anon, authenticated');
+    await db.applyMigration('20261103000500_revoke_default_table_grants.sql');
+    for (const t of ['access_requests', 'privacy_terms', 'privacy_acknowledgements']) {
+      const [p] = await db.sql(`select has_table_privilege('anon', $1, 'select') a, has_table_privilege('authenticated', $1, 'truncate') tr,
+        has_table_privilege('authenticated', $1, 'select') s`, [`public.${t}`]);
+      assert.deepEqual([p.a, p.tr, p.s], [false, false, true], `${t}: padrão do Supabase revogado pela 0500`);
+    }
     // Tabelas novas: nada de escrita direta por usuários.
     for (const t of ['privacy_terms', 'privacy_acknowledgements', 'portal_divulgacao', 'onboarding_drafts']) {
       const [p] = await db.sql(`select has_table_privilege('authenticated', $1, 'insert') i, has_table_privilege('authenticated', $1, 'update') u,
