@@ -15,6 +15,7 @@ import { SecurityCard } from './config/SecurityCard';
 import { CondoCard } from './config/CondoCard';
 import { DevicesCard } from './config/DevicesCard';
 import { PrivacyTermCard } from './config/PrivacyTermCard';
+import { DivulgacaoCard } from './config/DivulgacaoCard';
 
 type T = ReturnType<typeof useTenant>;
 interface Mod { id: string; title: string; desc: string; keys: string; allowed: (t: T) => boolean; render: (t: T) => React.ReactNode }
@@ -30,8 +31,8 @@ export const MODULES: Mod[] = [
     allowed: settings, render: () => <CondoCard /> },
   { id: 'identidade', title: 'Identidade visual', desc: 'Logo principal, cores, tema e prévia.', keys: 'marca logo cores tema aparencia nome exibido',
     allowed: settings, render: () => <BrandingCard /> },
-  { id: 'portal', title: 'Portal e aplicativo', desc: 'Link público, QR de acesso, autocadastro e ícone do app.', keys: 'link endereco qr compartilhar app pwa instalar icone autocadastro',
-    allowed: settings, render: () => <PortalCard /> },
+  { id: 'portal', title: 'Portal e aplicativo', desc: 'Link público, QR de acesso, ícone do app e divulgação aos moradores.', keys: 'link endereco qr compartilhar app pwa instalar icone autocadastro divulgacao cartaz comunicado whatsapp elevador mural',
+    allowed: settings, render: () => <><PortalCard /><DivulgacaoCard /></> },
   { id: 'operacao', title: 'Operação e armazenamento', desc: 'Portarias, estantes, prateleiras e capacidade.', keys: 'estante prateleira local guarda capacidade portaria armazenamento',
     allowed: settings, render: () => <StorageCard /> },
   { id: 'equipe', title: 'Equipe e permissões', desc: 'Porteiros, administradores, convites e revogações.', keys: 'equipe porteiro administrador sindico convite permissao revogar acesso',
