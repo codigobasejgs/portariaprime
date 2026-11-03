@@ -7,6 +7,7 @@ import { brl, dateTime } from '../../lib/format';
 import { DRAFT_KINDS, draftDoc, LegalKind, LEGAL_LABEL, Markdown } from '../../lib/legal';
 import { lineDiff } from '../../lib/legal-text';
 import { Alert, Badge, Button, Card, Field, Input, Modal, Select, Spinner } from '../../components/ui';
+import { useSensitive } from '../../components/Reauth';
 
 const FIELDS: [string, string][] = [['razao_social', 'Razão social'], ['cnpj', 'CNPJ'], ['endereco', 'Endereço'], ['email_contato', 'E-mail de contato'],
   ['canal_privacidade', 'Canal de privacidade'], ['encarregado', 'Encarregado(a) de dados'], ['foro', 'Foro'], ['representante', 'Representante legal'],
@@ -16,6 +17,57 @@ const NEXT: Record<string, [string, string][]> = {
   approved: [['published', 'Publicar'], ['draft', 'Devolver ao rascunho']],
 };
 const TONE: Record<string, 'neutral' | 'warning' | 'accent' | 'success'> = { draft: 'neutral', review: 'warning', approved: 'accent', published: 'success', archived: 'neutral' };
+
+/**
+ * Termo de dados do morador (global): vale para todo condomínio sem termo próprio, com {{CONDOMINIO}}
+ * trocado pelo nome. Publicado é imutável; publicar arquiva a versão anterior (aceites preservados).
+ */
+function GlobalPrivacyTerm({ canManage }: { canManage: boolean }) {
+  const [rows, setRows] = useState<any[] | null>(null);
+  const [edit, setEdit] = useState<any>(null);
+  const [view, setView] = useState<any>(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const { guard, dialog } = useSensitive('Publicar o termo global altera o que os moradores de todos os condomínios sem termo próprio aceitam. Confirme sua identidade.');
+  const load = () => rpc<any[]>('platform_privacy_terms').then(setRows).catch((e) => setError(friendly(e)));
+  useEffect(() => { void load(); }, []);
+  const act = async (fn: () => Promise<unknown>) => {
+    setBusy(true); setError('');
+    try { await fn(); await load(); } catch (e) { setError(friendly(e)); } finally { setBusy(false); }
+  };
+  if (!rows) return error ? <Alert tone="danger">{error}</Alert> : <Spinner />;
+  const current = rows.find((r) => r.status === 'published');
+  const draft = rows.find((r) => r.status === 'draft');
+  return <Card className="space-y-3">
+    <div className="flex flex-wrap justify-between gap-2 items-center"><h3 className="font-semibold">Termo de dados do morador (padrão)</h3>
+      {canManage && !draft && <Button variant="secondary" onClick={() => setEdit({ id: null, version: '', title: current?.title || '', content: current?.content || '', note: '' })}>Nova versão</Button>}</div>
+    <p className="text-sm text-muted">Exibido no cadastro de todo condomínio sem termo próprio. Use {'{{CONDOMINIO}}'} onde entra o nome do condomínio. O síndico só consulta.</p>
+    {error && <Alert tone="danger">{error}</Alert>}
+    <ul className="divide-y divide-line">{rows.map((r) => <li key={r.id} className="py-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+      <strong>v{r.version}</strong><Badge tone={TONE[r.status]}>{r.status}</Badge>
+      <span className="text-muted">{r.published_at ? `publicado ${dateTime(r.published_at)}` : `criado ${dateTime(r.created_at)}`} · {r.acknowledgements} aceite(s)</span>
+      <span className="basis-full text-xs text-muted font-mono break-all">SHA-256 {r.hash}</span>
+      <Button variant="ghost" onClick={() => setView(r)}>Ler</Button>
+      {canManage && r.status === 'draft' && <><Button variant="ghost" onClick={() => setEdit({ ...r, note: r.change_note || '' })}>Editar</Button>
+        <Button loading={busy} onClick={() => confirm(`Publicar a v${r.version}? O texto fica imutável e passa a valer para novos cadastros.`) && act(guard(async () => { await rpc('platform_privacy_term_publish', { p_id: r.id }); await load(); }))}>Publicar</Button></>}
+    </li>)}</ul>
+    {edit && <Modal wide title={edit.id ? `Editar rascunho v${edit.version}` : 'Nova versão do termo'} onClose={() => setEdit(null)}>
+      <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); act(async () => { await rpc('platform_privacy_term_save', { p_id: edit.id, p_version: edit.version, p_title: edit.title, p_content: edit.content, p_note: edit.note || null }); setEdit(null); }); }}>
+        <div className="grid sm:grid-cols-[160px_1fr] gap-3">
+          <Field label="Versão"><Input required disabled={!!edit.id} pattern="[0-9A-Za-z.\-]{1,20}" value={edit.version} onChange={(e) => setEdit({ ...edit, version: e.target.value })} /></Field>
+          <Field label="Título"><Input required minLength={3} maxLength={200} value={edit.title} onChange={(e) => setEdit({ ...edit, title: e.target.value })} /></Field>
+        </div>
+        <Field label="Texto" hint="Parágrafos separados por linha em branco. Obrigatório conter {{CONDOMINIO}}."><textarea required className="w-full min-h-[40vh] rounded-xl border border-line bg-surface p-3 text-sm" value={edit.content} onChange={(e) => setEdit({ ...edit, content: e.target.value })} /></Field>
+        <Field label="O que mudou"><Input maxLength={300} value={edit.note} onChange={(e) => setEdit({ ...edit, note: e.target.value })} /></Field>
+        <Button type="submit" loading={busy}>Salvar rascunho</Button>
+      </form>
+    </Modal>}
+    {view && <Modal wide title={`${view.title} — v${view.version}`} onClose={() => setView(null)}>
+      <div className="max-h-[60vh] overflow-y-auto space-y-2 text-sm" tabIndex={0}>{view.content.split(/\n{2,}/).map((p: string, i: number) => <p key={i}>{p}</p>)}</div>
+    </Modal>}
+    {dialog}
+  </Card>;
+}
 
 export default function LegalPanel({ canManage }: { canManage: boolean }) {
   const [status, setStatus] = useState<any>(null);
@@ -75,6 +127,8 @@ export default function LegalPanel({ canManage }: { canManage: boolean }) {
         </div>
       </li>)}</ul>
     </Card>}
+
+    <GlobalPrivacyTerm canManage={canManage} />
 
     {accs && <Card className="space-y-3">
       <h3 className="font-semibold">Aceites de contrato</h3>

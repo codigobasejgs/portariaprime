@@ -1,7 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { LifeBuoy, BarChart3, Building2, ChevronsLeft, ChevronsRight, CircleUser, HelpCircle, LayoutDashboard, LogOut, Menu, Package, Settings, Shield, Smartphone, Users, X } from 'lucide-react';
 import { useSession } from '../../lib/session';
-import { useTenant } from '../../lib/tenant';
+import { useRealtime, useRefreshWhileVisible, useTenant } from '../../lib/tenant';
+import { supabase } from '../../lib/supabase';
 import { navigate, onLink } from '../../lib/router';
 import { publicLogoUrl } from '../../lib/theme';
 import { Alert } from '../../components/ui';
@@ -10,7 +11,19 @@ import { useTour } from '../../components/TourGuide';
 import { articleFor } from '../../lib/help';
 import { loadProgress, saveProgress, toursFor } from '../../lib/tours';
 
-interface NavItem { area: string; label: string; icon: React.ElementType; show: boolean; match?: string[] }
+interface NavItem { area: string; label: string; icon: React.ElementType; show: boolean; match?: string[]; badge?: number }
+
+/** Solicitações de cadastro pendentes (só quem aprova); atualiza com o aviso em tempo real e ao voltar à tela. */
+function usePendingAccess(tenantId: string, enabled: boolean) {
+  const [n, setN] = useState(0);
+  const load = useCallback(() => {
+    if (enabled) void supabase.rpc('access_requests_pending_count', { p_tenant: tenantId }).then(({ data }) => setN(Number(data) || 0));
+  }, [tenantId, enabled]);
+  useEffect(() => { load(); addEventListener('pp:access-requests', load); return () => removeEventListener('pp:access-requests', load); }, [load]);
+  useRealtime('notifications', tenantId, load);
+  useRefreshWhileVisible(load, 60000);
+  return n;
+}
 
 const TITLES: Record<string, string> = {
   painel: 'Visão geral', portaria: 'Encomendas', 'totem-equipe': 'Totem da portaria', pessoas: 'Unidades e moradores', relatorios: 'Relatórios',
@@ -87,10 +100,11 @@ export function TenantShell({ area, children }: { area: string; children: React.
   const base = `/c/${t.tenant.slug}`;
   const role = t.link.role;
   const admin = role === 'admin';
+  const pending = usePendingAccess(t.tenant.id, t.can('approve'));
   const items: NavItem[] = [
     { area: 'painel', label: 'Visão geral', icon: LayoutDashboard, show: admin },
     { area: 'portaria', label: 'Encomendas', icon: Package, show: t.isStaff, match: ['portaria', 'totem-equipe'] },
-    { area: 'pessoas', label: 'Unidades e moradores', icon: Users, show: t.can('approve') || admin },
+    { area: 'pessoas', label: 'Unidades e moradores', icon: Users, show: t.can('approve') || admin, badge: pending },
     { area: 'relatorios', label: 'Relatórios', icon: BarChart3, show: admin },
   ];
   const bottom: NavItem[] = [
@@ -116,9 +130,10 @@ export function TenantShell({ area, children }: { area: string; children: React.
     const active = (i.match || [i.area]).includes(area);
     return (
       <a key={i.area} href={`${base}/${i.area}`} onClick={(e) => { onLink(e); setOpen(false); }} aria-current={active ? 'page' : undefined}
-        title={mini ? i.label : undefined} aria-label={mini ? i.label : undefined}
-        className={`flex items-center gap-3 rounded-xl ${mini ? 'justify-center' : 'px-3'} min-h-11 text-sm font-medium transition-colors ${active ? 'bg-primary text-primary-fg' : 'text-text hover:bg-surface-2'}`}>
-        <i.icon className="w-5 h-5 shrink-0" aria-hidden />{!mini && <span className="truncate">{i.label}</span>}
+        title={mini ? i.label : undefined} aria-label={mini || i.badge ? `${i.label}${i.badge ? ` (${i.badge} pendente${i.badge > 1 ? 's' : ''})` : ''}` : undefined}
+        className={`relative flex items-center gap-3 rounded-xl ${mini ? 'justify-center' : 'px-3'} min-h-11 text-sm font-medium transition-colors ${active ? 'bg-primary text-primary-fg' : 'text-text hover:bg-surface-2'}`}>
+        <i.icon className="w-5 h-5 shrink-0" aria-hidden />{!mini && <span className="truncate flex-1">{i.label}</span>}
+        {!!i.badge && <span aria-hidden data-testid={`badge-${i.area}`} className={`${mini ? 'absolute top-1 right-1' : ''} min-w-5 h-5 px-1 rounded-full bg-danger text-white text-[11px] font-semibold grid place-items-center`}>{i.badge > 99 ? '99+' : i.badge}</span>}
       </a>
     );
   };

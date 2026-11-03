@@ -70,9 +70,9 @@ try {
   const term = await call(sindico, 'privacy_term_save', { p_tenant: T, p_id: null, p_version: '1.0', p_title: draft.default_title, p_content: draft.default_content, p_note: null });
   await call(sindico, 'privacy_term_publish', { p_tenant: T, p_id: term.id });
   const { hash } = await call(pend, 'privacy_term_current', { p_slug: slug });
-  await call(pend, 'request_access', { p_slug: slug, p_full_name: 'Pessoa Pendente', p_phone: null, p_block: 'A', p_unit: '101', p_privacy_hash: hash });
+  await call(pend, 'request_access', { p_slug: slug, p_full_name: 'Pessoa Pendente', p_phone: '11977770001', p_block: 'A', p_unit: '101', p_privacy_hash: hash });
   // Ex-morador: autocadastro aprovado e depois revogado pela administração (fluxo real).
-  await call(ex, 'request_access', { p_slug: slug, p_full_name: 'Ex Morador', p_phone: null, p_block: 'A', p_unit: '101', p_privacy_hash: hash });
+  await call(ex, 'request_access', { p_slug: slug, p_full_name: 'Ex Morador', p_phone: '11977770002', p_block: 'A', p_unit: '101', p_privacy_hash: hash });
   const [exReq] = await call(sindico, 'list_access_requests', { p_tenant: T, p_status: 'pending' }).then((l) => l.filter((x) => x.full_name === 'Ex Morador'));
   await call(sindico, 'decide_access_request', { p_request: exReq.id, p_approve: true, p_unit: unit.id, p_reason: null });
   const { data: exMem } = await svc.from('tenant_memberships').select('id').eq('tenant_id', T).eq('user_id', ex.id).single();
@@ -222,7 +222,8 @@ try {
   const c2 = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true });
   const p2p = await c2.newPage();
   await login(p2p, pend, `/c/${slug}/inicio`);
-  await p2p.getByText('Cadastro aguardando aprovação').waitFor();
+  await p2p.getByRole('heading', { name: 'Cadastro recebido com sucesso!' }).waitFor();
+  await p2p.getByText('Aguardando aprovação').waitFor();
   assert.equal(await p2p.getByText(/Nenhuma encomenda/).count(), 0);
   await p2p.screenshot({ path: `${evidence}/morador-pendente-390.png`, fullPage: true });
   await c2.close();

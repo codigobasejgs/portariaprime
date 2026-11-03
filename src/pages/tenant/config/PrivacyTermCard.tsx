@@ -8,8 +8,9 @@ import { useSensitive } from '../../../components/Reauth';
 
 type Version = { id: string; version: string; title: string; content: string; hash: string; status: 'draft' | 'published' | 'archived';
   change_note: string | null; published_at: string | null; created_at: string; acknowledgements: number };
-type Admin = { default_title: string; default_content: string; versions: Version[] };
-type Ack = { id: string; accepted_at: string; term_version: string; full_name: string | null; unit_text: string | null; request_status: string | null };
+type Effective = { scope: 'global' | 'tenant'; version: string; title: string; content: string; hash: string; published_at: string | null };
+type Admin = { effective: Effective | null; global_acknowledgements: number; default_title: string; default_content: string; versions: Version[] };
+type Ack = { id: string; accepted_at: string; term_version: string; scope: 'global' | 'condominio'; full_name: string | null; unit_text: string | null; request_status: string | null };
 
 const STATUS: Record<Version['status'], [string, 'success' | 'warning' | 'neutral']> = {
   published: ['Vigente', 'success'], draft: ['Rascunho', 'warning'], archived: ['Arquivada', 'neutral'],
@@ -26,9 +27,9 @@ export function nextVersion(versions: { version: string }[]) {
 }
 
 /**
- * Configurações → Privacidade e LGPD. O síndico mantém o termo que o morador lê e aceita no cadastro.
+ * Configurações → Privacidade e LGPD. Por padrão vale o termo global da Portaria Prime (mantido pela plataforma,
+ * com o nome do condomínio). Termo próprio é opcional: publicado, substitui o global para os novos cadastros.
  * Publicado é imutável (nova versão arquiva a anterior com os aceites). Publicar pede a senha de novo.
- * Sem termo publicado o servidor recusa novos cadastros de moradores.
  */
 export function PrivacyTermCard() {
   const t = useTenant();
@@ -53,9 +54,10 @@ export function PrivacyTermCard() {
   const current = data.versions.find((v) => v.status === 'published');
   const draft = data.versions.find((v) => v.status === 'draft');
 
+  const eff = data.effective;
   const startDraft = () => setEditing(current
     ? { version: nextVersion(data.versions), title: current.title, content: current.content, change_note: '' }
-    : { version: nextVersion(data.versions), title: data.default_title, content: data.default_content, change_note: '' });
+    : { version: nextVersion(data.versions), title: eff?.title || data.default_title, content: eff?.content || data.default_content, change_note: '' });
 
   const publish = (v: Version) => guard(async () => {
     const r = await rpc<{ version: string }>('privacy_term_publish', { p_tenant: t.tenant.id, p_id: v.id });
@@ -66,9 +68,15 @@ export function PrivacyTermCard() {
 
   return (
     <div className="space-y-4">
-      {!current ? (
-        <Alert tone="warning"><strong>Nenhum termo publicado.</strong> Enquanto não houver termo vigente, moradores não conseguem enviar o cadastro pelo portal.</Alert>
+      {!current ? (eff ? (
+        <Card className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2"><ShieldCheck className="w-5 h-5 text-success" aria-hidden /><p className="font-semibold">Termo padrão Portaria Prime: versão {eff.version}</p><Badge tone="success">Vigente</Badge></div>
+          <p className="text-sm text-muted">Mantido pela Portaria Prime e exibido com o nome do seu condomínio. É o que os moradores leem e aceitam no cadastro · {data.global_acknowledgements} aceite(s) neste condomínio.</p>
+          <div className="flex flex-wrap gap-2 pt-1"><Button variant="secondary" onClick={() => setViewing({ ...eff, id: 'global', status: 'published', change_note: null, created_at: '', acknowledgements: data.global_acknowledgements } as Version)}>Ver texto vigente</Button></div>
+        </Card>
       ) : (
+        <Alert tone="warning"><strong>Termo indisponível.</strong> Não foi possível carregar o termo vigente. Recarregue a página ou fale com o suporte.</Alert>
+      )) : (
         <Card className="space-y-2">
           <div className="flex flex-wrap items-center gap-2"><ShieldCheck className="w-5 h-5 text-success" aria-hidden /><p className="font-semibold">Termo vigente: versão {current.version}</p><Badge tone="success">Vigente</Badge></div>
           <p className="text-sm text-muted">Publicado em {dateTime(current.published_at, t.tenant.timezone)} · {current.acknowledgements} aceite(s) nesta versão.</p>
@@ -82,7 +90,8 @@ export function PrivacyTermCard() {
         draft
           ? <Card className="space-y-2"><p className="font-semibold">Rascunho da versão {draft.version}</p><p className="text-sm text-muted">Ainda não vale para os moradores.</p>
               <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => setEditing(draft)}>Continuar editando</Button><Button onClick={() => setConfirm(draft)}>Publicar versão {draft.version}</Button></div></Card>
-          : <Button onClick={startDraft}><FileText className="w-4 h-4" aria-hidden /> {current ? 'Criar nova versão' : 'Criar termo a partir do texto-base'}</Button>
+          : <div className="space-y-1"><Button variant={current ? 'primary' : 'secondary'} onClick={startDraft}><FileText className="w-4 h-4" aria-hidden /> {current ? 'Criar nova versão' : 'Criar termo próprio (opcional)'}</Button>
+              {!current && <p className="text-xs text-muted">Opcional: publicado, o termo próprio substitui o padrão para os novos cadastros deste condomínio.</p>}</div>
       )}
       {!canEdit && <p className="text-sm text-muted">Somente quem altera as configurações do condomínio pode editar e publicar o termo.</p>}
 
@@ -94,8 +103,8 @@ export function PrivacyTermCard() {
       })} />}
 
       <section aria-labelledby="termo-versoes" className="space-y-2">
-        <h2 id="termo-versoes" className="font-semibold">Histórico de versões</h2>
-        {data.versions.length === 0 ? <p className="text-sm text-muted">Nenhuma versão criada.</p> : (
+        <h2 id="termo-versoes" className="font-semibold">Termo próprio do condomínio — versões</h2>
+        {data.versions.length === 0 ? <p className="text-sm text-muted">Nenhuma versão própria. Vale o termo padrão.</p> : (
           <ul className="divide-y divide-line rounded-2xl border border-line bg-surface">
             {data.versions.map((v) => (
               <li key={v.id} className="p-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
@@ -118,7 +127,7 @@ export function PrivacyTermCard() {
       </Modal>}
       {confirm && <Modal title={`Publicar versão ${confirm.version}?`} onClose={() => setConfirm(null)}>
         <div className="space-y-3 text-sm">
-          <p>A partir da publicação, todo novo cadastro de morador exigirá a leitura e a ciência <strong>desta versão</strong>.</p>
+          <p>A partir da publicação, todo novo cadastro de morador exigirá a leitura e a ciência <strong>desta versão</strong>{!current ? ', no lugar do termo padrão' : ''}.</p>
           {current && <p>A versão {current.version} será arquivada. Os {current.acknowledgements} aceite(s) dela continuam registrados.</p>}
           <p>O texto publicado não pode ser alterado; mudanças exigem nova versão.</p>
           <div className="flex flex-wrap gap-2"><Button onClick={() => run(publish(confirm))} loading={busy}>Publicar agora</Button><Button variant="ghost" onClick={() => setConfirm(null)}>Cancelar</Button></div>
@@ -178,7 +187,7 @@ function Acknowledgements() {
             <thead className="bg-surface-2 text-left"><tr><th className="p-2 font-medium">Morador</th><th className="p-2 font-medium">Unidade</th><th className="p-2 font-medium">Versão</th><th className="p-2 font-medium">Aceito em</th><th className="p-2 font-medium">Cadastro</th></tr></thead>
             <tbody className="divide-y divide-line">
               {data.rows.map((r) => (
-                <tr key={r.id}><td className="p-2">{r.full_name || '—'}</td><td className="p-2">{r.unit_text || '—'}</td><td className="p-2">v{r.term_version}</td>
+                <tr key={r.id}><td className="p-2">{r.full_name || '—'}</td><td className="p-2">{r.unit_text || '—'}</td><td className="p-2">v{r.term_version}{r.scope === 'global' ? ' (padrão)' : ''}</td>
                   <td className="p-2 whitespace-nowrap">{dateTime(r.accepted_at, t.tenant.timezone)}</td><td className="p-2">{REQ[r.request_status || ''] || r.request_status || '—'}</td></tr>
               ))}
             </tbody>

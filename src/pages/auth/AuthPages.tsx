@@ -5,7 +5,7 @@ import { navigate, onLink, query } from '../../lib/router';
 import { useSession } from '../../lib/session';
 import { Alert, Button, Field, Input, Spinner } from '../../components/ui';
 import { AuthLayout } from './AuthLayout';
-import { PortalShell, usePortal } from '../PortalPage';
+import { PortalShell, ResidentSignupPage, usePortal } from '../PortalPage';
 
 /** Login/cadastro aberto a partir do portal: mantém a marca do condomínio. */
 function Branded({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
@@ -72,6 +72,21 @@ export function LoginPage() {
 }
 
 export function SignupPage() {
+  // Morador vindo do portal: cadastro completo em uma etapa (dados da unidade + termo junto com a conta).
+  const slug = query('portal');
+  const n = query('next') || '';
+  if (slug && /^[a-z0-9-]{3,48}$/.test(slug) && n === `/c/${slug}/solicitar`) return <ResidentSignup slug={slug} />;
+  return <AccountSignup />;
+}
+
+function ResidentSignup({ slug }: { slug: string }) {
+  const { session } = useSession();
+  // Já conectado: a página do pedido mostra a situação (ou só o que falta).
+  useEffect(() => { if (session) navigate(`/c/${slug}/solicitar`, true); }, [session, slug]);
+  return session ? <Spinner /> : <ResidentSignupPage slug={slug} />;
+}
+
+function AccountSignup() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

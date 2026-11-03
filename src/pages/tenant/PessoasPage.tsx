@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Copy, MoreVertical, Plus, Upload } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { api, rpc } from '../../lib/api';
-import { useTenant } from '../../lib/tenant';
+import { useRealtime, useRefreshWhileVisible, useTenant } from '../../lib/tenant';
+import { maskPhone } from '../../lib/resident-signup';
 import { navigate, onLink } from '../../lib/router';
 import { parseCsv, unitName } from '../../lib/format';
 import { loadUnits, UnitRow } from '../../lib/packages';
@@ -359,14 +360,22 @@ function AccessRequests({ units, onDecided }: { units: UnitRow[]; onDecided: () 
   const [rows, setRows] = useState<any[] | null>(null);
   const [pick, setPick] = useState<Record<string, string>>({});
   const { busy, run } = useAction();
-  const load = useCallback(() => rpc<any[]>('list_access_requests', { p_tenant: t.tenant.id, p_status: status || null }).then(setRows).catch(() => setRows([])), [t.tenant.id, status]);
+  const [incomplete, setIncomplete] = useState<any[]>([]);
+  const load = useCallback(() => {
+    void rpc<any[]>('access_incomplete_signups', { p_tenant: t.tenant.id }).then((x) => setIncomplete(x || [])).catch(() => setIncomplete([]));
+    return rpc<any[]>('list_access_requests', { p_tenant: t.tenant.id, p_status: status || null }).then(setRows).catch(() => setRows([]));
+  }, [t.tenant.id, status]);
   useEffect(() => { load(); }, [load]);
+  // Pedido novo gera aviso para quem aprova: a fila atualiza sozinha (e ao voltar para a aba).
+  useRealtime('notifications', t.tenant.id, load);
+  useRefreshWhileVisible(load, 60000);
   const active = units.filter((u) => u.active);
   const decide = (r: any, approve: boolean) => run(async () => {
     const reason = approve ? null : prompt('Motivo da recusa (o morador verá esta mensagem):');
     if (!approve && (!reason || reason.trim().length < 3)) throw new Error('Informe o motivo da recusa.');
     await rpc('decide_access_request', { p_request: r.id, p_approve: approve, p_unit: pick[r.id] || r.unit_id || null, p_reason: reason });
     await load(); onDecided();
+    dispatchEvent(new Event('pp:access-requests')); // contador do menu
   }, approve ? 'Cadastro aprovado.' : 'Solicitação recusada.');
   if (!rows) return <Spinner />;
   return (
@@ -381,7 +390,8 @@ function AccessRequests({ units, onDecided }: { units: UnitRow[]; onDecided: () 
         <ul className="divide-y divide-line">
           {rows.map((r) => (
             <li key={r.id} className="py-3 space-y-2 text-sm">
-              <p><strong>{r.full_name}</strong> <span className="text-muted">{r.email}{r.phone ? ` · ${r.phone}` : ''}</span></p>
+              <p><strong>{r.full_name}</strong> <span className="text-muted">{r.email}{r.phone ? ` · ${maskPhone(r.phone)}` : ''}</span>
+                {r.email_verified === false && <> <Badge tone="warning">e-mail não confirmado</Badge></>}</p>
               <p>Informou: <strong>{[r.block_text, r.unit_text].filter(Boolean).join(' ')}</strong> · {new Date(r.created_at).toLocaleString('pt-BR')}
                 {r.status !== 'pending' && <> · <Badge tone={r.status === 'approved' ? 'success' : 'danger'}>{r.status === 'approved' ? 'aprovada' : 'recusada'}</Badge>{r.reason ? ` ${r.reason}` : ''}</>}</p>
               <p>{r.privacy_version
@@ -403,6 +413,13 @@ function AccessRequests({ units, onDecided }: { units: UnitRow[]; onDecided: () 
             </li>
           ))}
         </ul>
+      )}
+      {incomplete.length > 0 && (
+        <details className="text-sm rounded-xl bg-surface-2 p-3">
+          <summary className="cursor-pointer font-medium">Cadastros não concluídos ({incomplete.length})</summary>
+          <p className="mt-2 text-xs text-muted">Contas criadas pelo portal que ainda não confirmaram o e-mail ou não concluíram o envio. O pedido aparece na fila quando o morador entrar — nada é aprovado automaticamente.</p>
+          <ul className="mt-2 space-y-1">{incomplete.map((d, i) => <li key={i}>{d.full_name} · {[d.block_text, d.unit_text].filter(Boolean).join(' ')} <span className="text-muted">· {new Date(d.created_at).toLocaleDateString('pt-BR')}</span></li>)}</ul>
+        </details>
       )}
     </Card>
   );
