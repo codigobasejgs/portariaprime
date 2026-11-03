@@ -34,7 +34,7 @@ export function toCsv(rows: Record<string, unknown>[], cols: [string, string][])
   return '﻿' + [cols.map(([, h]) => cell(h)).join(';'), ...rows.map((r) => cols.map(([k]) => cell(r[k])).join(';'))].join('\r\n');
 }
 
-export function download(name: string, content: string, type = 'text/csv;charset=utf-8') {
+export function download(name: string, content: string | Uint8Array, type = 'text/csv;charset=utf-8') {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([content], { type }));
   a.download = name;

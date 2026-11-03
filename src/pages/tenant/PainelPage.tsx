@@ -1,11 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowDownRight, ArrowUpRight, Download, Package, PackageCheck, Tablet, UserCheck } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Download, Package, PackageCheck, Tablet, UserCheck } from 'lucide-react';
 import { rpc } from '../../lib/api';
 import { useTenant } from '../../lib/tenant';
 import { navigate, onLink, query } from '../../lib/router';
 import { dateTime, download, STATUS_LABEL, toCsv, unitName } from '../../lib/format';
 import { listAllPackages, listPackages, PackageRow } from '../../lib/packages';
 import { Alert, Button, Card, Empty, Field, Input, Select, Spinner, toast } from '../../components/ui';
+import { Analysis } from './PainelAnalise';
 
 const ymd = (tz: string, delta = 0) => new Date(Date.now() + delta * 86400000).toLocaleDateString('en-CA', { timeZone: tz });
 const n = (v: unknown) => Number(v || 0).toLocaleString('pt-BR');
@@ -21,14 +22,6 @@ function Kpi({ label, value, hint, href, tone }: { label: string; value: React.R
   return href
     ? <a href={href} onClick={onLink} className="block rounded-2xl border border-line bg-surface p-4 hover:bg-surface-2 focus:outline-none focus:ring-2 focus:ring-accent">{body}</a>
     : <Card>{body}</Card>;
-}
-
-/** Variação sem base (anterior = 0) aparece como texto, nunca como infinito. */
-function Change({ value, previous, change }: { value: number; previous: number; change: number | null }) {
-  if (change === null) return <span>{previous === 0 && value > 0 ? 'Sem base de comparação' : 'Igual ao período anterior'}</span>;
-  const up = change > 0;
-  const Icon = up ? ArrowUpRight : ArrowDownRight;
-  return <span className="inline-flex items-center gap-1">{change === 0 ? 'Igual' : <><Icon className="w-3 h-3" aria-hidden />{Math.abs(change * 100).toFixed(0)}%</>} vs. período anterior ({n(previous)})</span>;
 }
 
 export function PainelPage() {
@@ -143,125 +136,6 @@ function Operation() {
         )}
       </Card>
       <p className="text-xs text-muted">Valores calculados no servidor, no fuso {d.timezone}. Atualizado em {dateTime(d.as_of, t.tenant.timezone)}.</p>
-    </div>
-  );
-}
-
-const DOW = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
-const CH: Record<string, string> = { whatsapp: 'WhatsApp', email: 'E-mail', push: 'Push' };
-const STATE: Record<string, string> = { pending: 'Pendente', accepted: 'Aceito pelo provedor', delivered: 'Entregue (confirmado)', failed_retryable: 'Falha (vai tentar de novo)', failed_final: 'Falha final', disabled: 'Desativado/sem canal' };
-
-function Analysis() {
-  const t = useTenant();
-  const tz = t.tenant.timezone;
-  const [range, setRange] = useState<'1' | '7' | '30' | 'custom'>('30');
-  const [from, setFrom] = useState(ymd(tz, -29));
-  const [to, setTo] = useState(ymd(tz));
-  const [d, setD] = useState<any>(null);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => { if (range !== 'custom') { setFrom(ymd(tz, -(Number(range) - 1))); setTo(ymd(tz)); } }, [range, tz]);
-  useEffect(() => {
-    setD(null);
-    rpc('dashboard_analysis', { p_tenant: t.tenant.id, p_from: from, p_to: to }).then((x) => { setD(x); setError(null); }).catch((e) => setError(e.message));
-  }, [t.tenant.id, from, to]);
-  const maxDay = useMemo(() => Math.max(1, ...(d?.daily || []).map((x: any) => Math.max(x.in, x.out))), [d]);
-  const heat = useMemo(() => {
-    const m = new Map<string, number>(); let max = 0;
-    for (const h of d?.heatmap || []) { m.set(`${h.dow}-${h.hour}`, h.n); max = Math.max(max, h.n); }
-    return { m, max };
-  }, [d]);
-  const peak = useMemo(() => (d?.heatmap || []).reduce((a: any, b: any) => (!a || b.n > a.n ? b : a), null), [d]);
-  const totalCarrier = (d?.carriers || []).reduce((s: number, c: any) => s + c.n, 0);
-
-  return (
-    <div className="space-y-4">
-      <Card className="flex flex-wrap items-end gap-3" data-tour="painel-filtros">
-        <div role="radiogroup" aria-label="Período" className="inline-flex rounded-xl border border-line p-1">
-          {([['1', 'Hoje'], ['7', '7 dias'], ['30', '30 dias'], ['custom', 'Personalizado']] as const).map(([v, l]) => (
-            <button key={v} role="radio" aria-checked={range === v} onClick={() => setRange(v)} className={`px-3 min-h-10 rounded-lg text-sm ${range === v ? 'bg-surface-2 font-semibold' : ''}`}>{l}</button>
-          ))}
-        </div>
-        {range === 'custom' && <>
-          <Field label="De"><Input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} /></Field>
-          <Field label="Até"><Input type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} /></Field>
-        </>}
-      </Card>
-      {error ? <Alert tone="danger">{error}</Alert> : !d ? <Spinner /> : (
-        <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <Kpi label="Entradas no período" value={n(d.entries.value)} hint={<Change {...d.entries} />} />
-            <Kpi label="Retiradas no período" value={n(d.pickups.value)} hint={<Change {...d.pickups} />} />
-            <Kpi label="Tempo até retirada (mediana)" value={d.dwell.n ? `${d.dwell.median_h} h` : '—'}
-              hint={d.dwell.n ? `média ${d.dwell.avg_h} h${d.dwell.p90_h != null ? ` · 90% até ${d.dwell.p90_h} h` : ''} · ${d.dwell.n} retiradas` : 'Sem retiradas no período'} />
-            <Kpi label="Adesão dos moradores" value={d.adoption.units_active ? `${Math.round(d.adoption.units_with_resident / d.adoption.units_active * 100)}%` : '—'}
-              hint={`${d.adoption.units_with_resident} de ${d.adoption.units_active} unidades com morador aprovado${d.adoption.pending_requests ? ` · ${d.adoption.pending_requests} pendente(s)` : ''}`} />
-          </div>
-
-          <Card>
-            <p className="font-semibold">Entradas e retiradas por dia</p>
-            <p className="text-xs text-muted mb-3"><span className="inline-block w-3 h-3 rounded-sm bg-secondary align-middle mr-1" />Entradas <span className="inline-block w-3 h-3 rounded-sm bg-accent align-middle ml-3 mr-1" />Retiradas</p>
-            {d.daily.every((x: any) => !x.in && !x.out) ? <p className="text-sm text-muted">Sem movimentação no período.</p> : (
-              <div className="flex items-end gap-1 h-40 overflow-x-auto" role="img" aria-label={`Gráfico de ${d.days} dias; tabela abaixo`}>
-                {d.daily.map((x: any) => (
-                  <div key={x.day} className="flex-1 min-w-[10px] flex items-end gap-px h-full" title={`${x.day}: ${x.in} entradas, ${x.out} retiradas`}>
-                    <div className="flex-1 bg-secondary rounded-t" style={{ height: `${(x.in / maxDay) * 100}%` }} />
-                    <div className="flex-1 bg-accent rounded-t" style={{ height: `${(x.out / maxDay) * 100}%` }} />
-                  </div>
-                ))}
-              </div>
-            )}
-            <details className="mt-2 text-sm"><summary className="cursor-pointer text-muted">Ver tabela</summary>
-              <div className="max-h-60 overflow-y-auto"><table className="w-full mt-2"><thead className="text-left text-muted"><tr><th className="font-medium">Dia</th><th className="font-medium">Entradas</th><th className="font-medium">Retiradas</th></tr></thead>
-                <tbody>{d.daily.map((x: any) => <tr key={x.day}><td>{new Date(`${x.day}T12:00:00`).toLocaleDateString('pt-BR')}</td><td className="tabular-nums">{x.in}</td><td className="tabular-nums">{x.out}</td></tr>)}</tbody></table></div>
-            </details>
-          </Card>
-
-          <div className="grid lg:grid-cols-2 gap-3">
-            <Card>
-              <p className="font-semibold mb-2">Aguardando agora, por tempo</p>
-              <ul className="space-y-1 text-sm">
-                {([['lt24', 'Até 24 h'], ['h24_48', '24–48 h'], ['h48_72', '48–72 h'], ['gt72', 'Mais de 72 h']] as const).map(([k, l]) => (
-                  <li key={k} className="flex justify-between"><span>{l}</span><span className={`tabular-nums ${k === 'gt72' && d.aging_now[k] ? 'text-warning font-semibold' : ''}`}>{n(d.aging_now[k])}</span></li>
-                ))}
-              </ul>
-            </Card>
-            <Card>
-              <p className="font-semibold mb-2">Transportadoras</p>
-              {totalCarrier === 0 ? <p className="text-sm text-muted">Sem entradas no período.</p> : (
-                <ul className="space-y-1 text-sm">{d.carriers.map((c: any) => <li key={c.carrier} className="flex justify-between gap-2"><span>{c.carrier}</span><span className="tabular-nums">{n(c.n)} · {Math.round(c.n / totalCarrier * 100)}%</span></li>)}</ul>
-              )}
-            </Card>
-          </div>
-
-          <Card>
-            <p className="font-semibold">Quando as encomendas chegam</p>
-            {!peak ? <p className="text-sm text-muted">Sem entradas no período.</p> : <>
-              <p className="text-sm text-muted mb-3">Maior concentração: {DOW[peak.dow - 1]} entre {peak.hour}h e {peak.hour + 1}h ({peak.n} {peak.n === 1 ? 'entrada' : 'entradas'}). Considere reforçar a portaria nesse horário.</p>
-              <div className="overflow-x-auto"><table className="text-[10px]" aria-label="Entradas por dia da semana e hora">
-                <thead><tr><th />{Array.from({ length: 24 }, (_, h) => <th key={h} className="font-normal text-muted w-5">{h % 3 === 0 ? h : ''}</th>)}</tr></thead>
-                <tbody>{DOW.map((w, i) => <tr key={w}><th className="font-normal text-muted pr-1 text-left">{w}</th>
-                  {Array.from({ length: 24 }, (_, h) => { const v = heat.m.get(`${i + 1}-${h}`) || 0; return <td key={h} title={`${w} ${h}h: ${v}`} className="w-5 h-5 rounded-sm" style={{ background: v ? `color-mix(in srgb, var(--c-secondary) ${20 + 80 * v / heat.max}%, transparent)` : 'var(--c-surface-2, #eee)' }} />; })}</tr>)}</tbody>
-              </table></div>
-            </>}
-          </Card>
-
-          <div className="grid lg:grid-cols-2 gap-3">
-            <Card>
-              <p className="font-semibold mb-2">Exceções no período</p>
-              {d.exceptions.length === 0 ? <p className="text-sm text-muted">Nenhuma devolução, cancelamento ou extravio registrado.</p>
-                : <ul className="space-y-1 text-sm">{d.exceptions.map((e: any) => <li key={e.status} className="flex justify-between"><span>{STATUS_LABEL[e.status]}</span><span className="tabular-nums">{n(e.n)}</span></li>)}</ul>}
-            </Card>
-            <Card>
-              <p className="font-semibold mb-2">Comunicações por canal</p>
-              {d.channels.length === 0 ? <p className="text-sm text-muted">Nenhum aviso no período.</p> : (
-                <table className="w-full text-sm"><tbody>{d.channels.sort((a: any, b: any) => a.channel.localeCompare(b.channel)).map((c: any) => (
-                  <tr key={c.channel + c.state}><td>{CH[c.channel] || c.channel}</td><td className="text-muted">{STATE[c.state] || c.state}</td><td className="text-right tabular-nums">{n(c.n)}</td></tr>))}</tbody></table>
-              )}
-              <p className="text-xs text-muted mt-2">“Aceito pelo provedor” não significa que o morador leu.</p>
-            </Card>
-          </div>
-        </>
-      )}
     </div>
   );
 }
