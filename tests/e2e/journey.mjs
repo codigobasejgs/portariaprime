@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { chromium } from '@playwright/test';
 import { createClient } from '@supabase/supabase-js';
-import { assertLocalSupabase } from './environment.mjs';
+import { assertLocalSupabase, fakeCnpj, onboard } from './environment.mjs';
 
 const { PP_E2E_ALLOW, APP, SUPABASE_URL: url, SUPABASE_ANON_KEY: anon, SUPABASE_SERVICE_ROLE_KEY: secret } = process.env;
 if (PP_E2E_ALLOW !== '1' || !APP || !url || !anon || !secret) throw new Error('Defina PP_E2E_ALLOW=1, APP e chaves do Supabase.');
@@ -87,14 +87,7 @@ try {
   await login(s, sindico);
   await s.waitForURL(/\/app/);
   await s.getByRole('button', { name: 'Cadastrar condomínio' }).click();
-  await s.getByLabel('Nome do condomínio').fill('Residencial Jornada E2E');
-  await s.getByLabel(/Endereço no sistema/).fill(slug);
-  await s.getByLabel(/CNPJ do condomínio/).fill(String(10_000_000_000_000 + (Date.now() % 9_000_000_000_000)).slice(0, 14));
-  await s.getByText('Primeiro mês grátis; depois').waitFor();
-  await shot(s, 'onboarding');
-  // Aceite explícito (não pré-marcado) dos termos do teste.
-  await s.locator('form input[type=checkbox]').last().check();
-  await s.getByRole('button', { name: 'Ativar mês grátis' }).click();
+  await onboard(s, { name: 'Residencial Jornada E2E', slug, document: fakeCnpj() });
   await s.waitForURL(new RegExp(`/c/${slug}/configuracoes`));
   await s.getByText('Condomínio criado e mês grátis ativo').waitFor();
   ({ data: { id: tenantId } } = await svc.from('tenants').select('id').eq('slug', slug).single());

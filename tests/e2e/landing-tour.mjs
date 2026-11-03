@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import { chromium } from '@playwright/test';
 import { createClient } from '@supabase/supabase-js';
-import { assertLocalSupabase } from './environment.mjs';
+import { assertLocalSupabase, fakeCnpj, onboard } from './environment.mjs';
 
 const { APP, SUPABASE_URL: url, SUPABASE_SERVICE_ROLE_KEY: secret, PP_E2E_ALLOW } = process.env;
 if (PP_E2E_ALLOW !== '1' || !APP) throw new Error('Defina PP_E2E_ALLOW=1 e APP.');
@@ -111,12 +111,7 @@ try {
   await s.waitForURL(/\/app/);
   await s.getByRole('button', { name: 'Cadastrar condomínio' }).click();
   const slug = `e2e-tour-${Date.now().toString(36)}`;
-  await s.getByLabel('Nome do condomínio').fill('Condomínio Tour QA');
-  await s.getByLabel(/Endereço no sistema/).fill(slug);
-  await s.getByLabel(/CNPJ do condomínio/).fill(String(33_000_000_000_000 + (Date.now() % 9_000_000_000)));
-  // Aceite explícito (não pré-marcado) dos termos do teste.
-  await s.locator('form input[type=checkbox]').last().check();
-  await s.getByRole('button', { name: 'Ativar mês grátis' }).click();
+  await onboard(s, { name: 'Condomínio Tour QA', slug, document: fakeCnpj() });
   await s.waitForURL(new RegExp(`/c/${slug}/configuracoes`));
   await s.getByRole('button', { name: 'Fazer o tutorial' }).click();
   const tip = s.getByRole('dialog', { name: /Tutorial: Primeiros passos do síndico/ });

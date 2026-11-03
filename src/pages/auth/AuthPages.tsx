@@ -79,9 +79,13 @@ export function SignupPage() {
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
-  const next = query('next') || '/onboarding';
+  const [next] = useState(() => { const n = query('next'); return n && n.startsWith('/') && !n.startsWith('//') ? n : '/onboarding'; });
   const resident = next.startsWith('/convite') || /^\/c\/[a-z0-9-]+\/solicitar$/.test(next);
+  const { session } = useSession();
   useEffect(() => { if (!resident) track('signup_started'); }, [resident]);
+  // Com confirmação automática (produção) o signUp já devolve sessão e o app remonta esta página:
+  // sem este desvio a pessoa via o formulário vazio de novo. Conta já conectada segue para o destino.
+  useEffect(() => { if (session && location.pathname === '/cadastro') navigate(next, true); }, [session, next]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,7 +93,7 @@ export function SignupPage() {
     if (!accepted) return setError('É preciso aceitar os termos e a política de privacidade.');
     setBusy(true);
     setError(null);
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email: email.trim().toLowerCase(),
       password,
       options: { data: { full_name: name.trim() }, emailRedirectTo: `${origin()}/entrar?next=${encodeURIComponent(next)}${query('portal') ? `&portal=${query('portal')}` : ''}` },
@@ -97,6 +101,7 @@ export function SignupPage() {
     setBusy(false);
     if (error) return setError(/registered|exists/i.test(error.message) ? 'Este e-mail já tem conta. Use "Entrar".' : friendly(error));
     if (!resident) track('signup_completed');
+    if (data.session) return navigate(next, true);
     setSent(true);
   };
 

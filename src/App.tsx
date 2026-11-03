@@ -105,7 +105,7 @@ function Routes() {
     {Array.from(new Map(ctx.tenants.map(t => [t.tenant_id, t])).values()).map(t => <Card key={t.tenant_id}>
       <a className="font-semibold underline" href={`/c/${t.slug}`} onClick={onLink}>{t.name}</a>
     </Card>)}
-    <Button onClick={() => navigate('/onboarding')}>Cadastrar condomínio</Button>
+    <Button onClick={() => navigate(ctx.tenants.length ? '/onboarding?novo=1' : '/onboarding')}>Cadastrar condomínio</Button>
     <Button variant="secondary" onClick={() => navigate('/org')}>Administradoras</Button>
     {(ctx.platform_admin || ctx.platform_role) && <Button variant="secondary" onClick={() => navigate('/admin')}>Administrar plataforma</Button>}
     <Button variant="ghost" onClick={signOut}>Sair</Button>
