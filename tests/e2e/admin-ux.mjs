@@ -102,16 +102,18 @@ try {
   const { data: pn } = await svc.from('notifications').select('read_at').eq('user_id', porteiro.id).single();
   assert.equal(pn.read_at, null, 'leitura não afeta outro usuário');
 
+  // Aba Análise = dashboard executivo (d3a4fca); números detalhados em tests/e2e/dashboard-executive.mjs.
   step('Análise: período, comparação sem base, mapa de calor com alternativa em tabela');
   await page.goto(`${APP}/c/${slug}/painel`);
   await page.getByRole('tab', { name: 'Análise' }).click();
-  await page.getByText('Entradas no período').waitFor();
-  await page.getByRole('radio', { name: '7 dias' }).click();
+  await page.getByText('Recebidas no período', { exact: true }).waitFor();
+  await page.getByLabel('Período').selectOption('7');
   await page.getByText('Aguardando agora, por tempo').waitFor();
   await page.getByText('Quando as encomendas chegam').waitFor();
   await page.screenshot({ path: `${evidence}/admin-analise-1280.png`, fullPage: true });
   await page.reload();
-  await page.getByText('Entradas no período').waitFor(); // aba lembrada
+  await page.getByText('Recebidas no período', { exact: true }).waitFor(); // aba lembrada
+  assert.equal(await page.getByLabel('Período').inputValue(), '7', 'período lembrado após recarregar');
 
   step('KPI leva a Relatórios filtrado; exportação CSV');
   await page.getByRole('tab', { name: 'Operação' }).click();

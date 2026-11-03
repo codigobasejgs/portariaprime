@@ -32,7 +32,9 @@ try {
   await page.getByRole('heading', { name: 'Receba uma proposta competitiva' }).waitFor();
   await page.getByRole('heading', { name: 'Tenho um orçamento para comparar' }).waitFor();
   await page.locator('#planos').getByText('Profissional', { exact: true }).first().waitFor();
-  const text = (await page.locator('body').innerText()).toLowerCase();
+  // "Modo Portaria Exclusiva" é o nome do produto (aprovado, em produção desde 29/10/2026); a regra
+  // continua barrando "exclusividade"/"exclusivo do mercado" e afins.
+  const text = (await page.locator('body').innerText()).toLowerCase().replace(/(modo )?portaria exclusiva/g, '');
   for (const banned of ['menor preço', 'segurança total', 'ilimitad', 'exclusiv', '99,9', '24h', 'app store e', 'cobrimos qualquer', 'depoimento', 'clientes satisfeitos', '59.760.458']) {
     assert.ok(!text.includes(banned), `alegação proibida na landing: ${banned}`);
   }

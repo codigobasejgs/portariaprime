@@ -64,9 +64,15 @@ try {
   for (const m of [ana, bruno]) await invite(m, 'morador', unit.id);
   await svc.from('profiles').update({ full_name: 'Ana Maria Teste' }).eq('id', ana.id);
   await svc.from('resident_contacts').update({ phone: '+5511900000002' }).eq('user_id', bruno.id);
-  await call(pend, 'request_access', { p_slug: slug, p_full_name: 'Pessoa Pendente', p_phone: null, p_block: 'A', p_unit: '101' });
+  // Autocadastro exige o termo de dados publicado (20261103000100): o síndico cria e publica
+  // (a publicação pede login recente — o síndico acabou de entrar) e o morador envia o hash lido.
+  const draft = await call(sindico, 'privacy_terms_admin', { p_tenant: T });
+  const term = await call(sindico, 'privacy_term_save', { p_tenant: T, p_id: null, p_version: '1.0', p_title: draft.default_title, p_content: draft.default_content, p_note: null });
+  await call(sindico, 'privacy_term_publish', { p_tenant: T, p_id: term.id });
+  const { hash } = await call(pend, 'privacy_term_current', { p_slug: slug });
+  await call(pend, 'request_access', { p_slug: slug, p_full_name: 'Pessoa Pendente', p_phone: null, p_block: 'A', p_unit: '101', p_privacy_hash: hash });
   // Ex-morador: autocadastro aprovado e depois revogado pela administração (fluxo real).
-  await call(ex, 'request_access', { p_slug: slug, p_full_name: 'Ex Morador', p_phone: null, p_block: 'A', p_unit: '101' });
+  await call(ex, 'request_access', { p_slug: slug, p_full_name: 'Ex Morador', p_phone: null, p_block: 'A', p_unit: '101', p_privacy_hash: hash });
   const [exReq] = await call(sindico, 'list_access_requests', { p_tenant: T, p_status: 'pending' }).then((l) => l.filter((x) => x.full_name === 'Ex Morador'));
   await call(sindico, 'decide_access_request', { p_request: exReq.id, p_approve: true, p_unit: unit.id, p_reason: null });
   const { data: exMem } = await svc.from('tenant_memberships').select('id').eq('tenant_id', T).eq('user_id', ex.id).single();

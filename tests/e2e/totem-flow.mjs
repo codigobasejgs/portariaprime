@@ -145,12 +145,21 @@ try {
   await modal.getByLabel('Justificativa').fill('Teste E2E: QR conferido por consulta na tela');
   await assert.ok(await modal.getByRole('button', { name: 'Confirmar entrega' }).isDisabled(), 'sem assinatura/foto não confirma');
   const canvas = modal.locator('canvas');
-  const box = await canvas.boundingBox();
-  await page.mouse.move(box.x + 20, box.y + 30); await page.mouse.down();
-  await page.mouse.move(box.x + 120, box.y + 60, { steps: 8 }); await page.mouse.move(box.x + 200, box.y + 25, { steps: 8 });
-  await page.mouse.up();
+  // Sob carga o modal ainda está assentando: assinar só com o canvas parado (2 leituras iguais).
+  const sign = async () => {
+    let box = await canvas.boundingBox();
+    for (let i = 0; i < 20; i++) { await page.waitForTimeout(100); const b = await canvas.boundingBox(); if (b && box && b.x === box.x && b.y === box.y && b.width === box.width) break; box = b; }
+    await page.mouse.move(box.x + 20, box.y + 30); await page.mouse.down();
+    await page.mouse.move(box.x + 120, box.y + 60, { steps: 8 }); await page.mouse.move(box.x + 200, box.y + 25, { steps: 8 });
+    await page.mouse.up();
+  };
+  await sign();
   await modal.locator('input[type=file]').setInputFiles({ name: 'item.png', mimeType: 'image/png', buffer: png });
   await modal.getByAltText('Foto do item entregue').waitFor();
+  // Assinatura e foto presentes → botão habilita. Se o traço não registrou (raro sob carga), assina de novo uma vez.
+  const confirmBtn = modal.getByRole('button', { name: 'Confirmar entrega' });
+  if (!(await confirmBtn.isEnabled())) { console.log('  (assinatura não registrou; assinando de novo)'); await sign(); }
+  assert.ok(await confirmBtn.isEnabled(), 'com assinatura e foto, a entrega pode ser confirmada');
   await modal.getByRole('button', { name: 'Confirmar entrega' }).click();
   await page.getByText('Comprovante de retirada').first().waitFor();
   await page.screenshot({ path: `${evidence}/totem-comprovante.png`, fullPage: true });
