@@ -44,6 +44,21 @@ test('aprovado: uma mensagem (aprovação + boas-vindas) por canal, link do port
   }
 });
 
+test('qualquer condomínio: o nome vem do cadastro dele (nada fixo no código)', () => {
+  for (let i = 0; i < 20; i++) {
+    const nome = `Condomínio Teste ${crypto.randomUUID().slice(0, 8)}`;
+    const ctx = { ...A, tenant_name: nome, tenant_slug: `cond-${i}`, logo_url: null };
+    for (const [ev, pl] of [['access_received', {}], ['access_decision', { approved: true }], ['access_decision', { approved: false }]]) {
+      const m = render(ev, ctx, pl, APP);
+      const all = [m.subject, m.intro, m.whatsapp, emailHtml(ctx, m), emailText(ctx, m)].join('\n');
+      assert.ok(all.includes(nome), `${ev}: nome do condomínio do cadastro`);
+      assert.ok(!/Aurora|Village|Azal/i.test(all), `${ev}: sem nome de outro condomínio`);
+      assert.ok(m.cta[1].includes(`/c/cond-${i}`), `${ev}: link do próprio condomínio`);
+    }
+    assert.equal(render('access_decision', ctx, { approved: true }, APP).subject, `Bem-vindo ao ${nome}!`);
+  }
+});
+
 test('recusado: orientação segura, motivo informado pelo síndico (escapado no HTML)', () => {
   const ctx = { ...A, resident: { name: 'Ana', unit: 'A 101', reason: '<script>alert(1)</script> Unidade não confere' } };
   const m = render('access_decision', ctx, { approved: false }, APP);
