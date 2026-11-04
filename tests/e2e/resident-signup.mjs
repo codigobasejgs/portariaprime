@@ -150,6 +150,20 @@ try {
   await login(m, mail('ana'), `/c/${slug}`);
   await m.waitForURL(new RegExp(`/c/${slug}/inicio`));
 
+  step('conectado com conta da equipe: "Entrar como morador" troca de conta e abre o LOGIN (não o cadastro)');
+  await s.goto(`${APP}/c/${slug}`);
+  await s.waitForURL(new RegExp(`/c/${slug}/painel`));
+  const ex = await (await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true })).newPage(); watch(ex, 'troca');
+  await ex.goto(`${APP}/entrar`);
+  await ex.getByLabel('E-mail').fill(outro.email); await ex.getByLabel('Senha').fill(PASS); await ex.getByRole('button', { name: 'Entrar' }).click();
+  await ex.waitForURL((u) => u.pathname !== '/entrar');
+  await ex.goto(`${APP}/c/${slug}`);
+  await ex.getByText(/sem acesso de morador aqui/).waitFor();
+  await ex.getByRole('button', { name: 'Entrar como morador' }).click();
+  await ex.getByRole('heading', { name: 'Entrar' }).waitFor();
+  assert.equal(await ex.getByLabel('Nome completo').count(), 0, 'login, não cadastro');
+  assert.equal(new URL(ex.url()).pathname, '/entrar');
+
   step('e-mail já cadastrado: orienta a entrar, sem criar outra conta');
   const d = await (await browser.newContext({ viewport: { width: 1280, height: 900 } })).newPage(); watch(d, 'repetido');
   await d.goto(`${APP}/cadastro?next=${encodeURIComponent(`/c/${slug}/solicitar`)}&portal=${slug}`);

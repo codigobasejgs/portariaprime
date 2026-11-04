@@ -62,13 +62,14 @@ export function PortalNotFound({ error }: { error?: string | null }) {
  */
 export function PortalPage({ slug }: { slug: string }) {
   const { portal, error } = usePortal(slug);
-  const { session } = useSession();
+  const { session, ctx, signOut } = useSession();
   const { isInstalled, isInstallable, promptInstall } = usePwaInstall();
   if (portal === undefined) return <Spinner />;
   if (!portal || portal.status !== 'active') return <PortalNotFound error={error || (portal ? 'Este portal está temporariamente indisponível.' : null)} />;
   const here = `/c/${slug}`;
   const next = encodeURIComponent(`${here}/solicitar`);
-  const enter = () => navigate(session ? `${here}/solicitar` : `/entrar?next=${next}&portal=${slug}`);
+  // Já conectado com outra conta (equipe, outro condomínio): "Entrar" troca de conta; nunca abre o cadastro.
+  const enter = async () => { if (session) await signOut(); navigate(`/entrar?next=${next}&portal=${slug}`); };
   // "Criar minha conta" abre direto o cadastro completo (conta + unidade + termo).
   const signup = () => navigate(session ? `${here}/solicitar` : `/cadastro?next=${next}&portal=${slug}`);
   const ua = typeof navigator === 'undefined' ? '' : navigator.userAgent;
@@ -80,6 +81,7 @@ export function PortalPage({ slug }: { slug: string }) {
         <p className="text-muted">Acompanhe as encomendas e correspondências da sua unidade, receba avisos quando algo chegar e retire na portaria com o QR Code.</p>
       </section>
 
+      {session && <p className="mt-4 text-sm text-muted">Conectado como <strong className="break-all">{ctx?.email}</strong>, sem acesso de morador aqui. "Entrar como morador" sai desta conta.</p>}
       <div className="mt-6 grid sm:grid-cols-2 gap-3">
         <Button onClick={enter} className="w-full min-h-14 text-base">Entrar como morador</Button>
         <Button variant="secondary" onClick={signup} className="w-full min-h-14 text-base">Criar minha conta</Button>
