@@ -83,7 +83,12 @@ alter table public.privacy_acknowledgements add constraint privacy_ack_one_sourc
 alter table public.privacy_acknowledgements drop constraint if exists privacy_acknowledgements_action_source_check;
 alter table public.privacy_acknowledgements add constraint privacy_acknowledgements_action_source_check
   check (action_source in ('cadastro_portal', 'portal_reaceite', 'cadastro_completo'));
-create unique index privacy_ack_once_global on public.privacy_acknowledgements (tenant_id, user_id, global_term_id) where global_term_id is not null;
+-- Um aceite por PEDIDO e versão (antes: por pessoa e versão). Reenvio após recusa marca o termo de novo e
+-- precisa do próprio registro, senão o pedido novo fica sem aceite e a aprovação é bloqueada. Reenvio do
+-- mesmo pedido pendente continua sem duplicar. Registros antigos ficam como estão (sem aceite retroativo).
+drop index if exists public.privacy_ack_once;
+create unique index privacy_ack_once_request on public.privacy_acknowledgements (access_request_id, privacy_term_id) where privacy_term_id is not null;
+create unique index privacy_ack_once_global on public.privacy_acknowledgements (access_request_id, global_term_id) where global_term_id is not null;
 
 -- Termo aplicável ao condomínio: o próprio (se o síndico publicou) ou o global. Texto já com o nome do condomínio.
 -- Placeholder só aceita o nome do PRÓPRIO condomínio (vem da linha de tenants, nunca do navegador).
@@ -114,30 +119,24 @@ $$;
 -- Registra o aceite do termo aplicável. O hash que o navegador leu precisa ser o do texto vigente.
 create or replace function app.privacy_record_ack(p_tenant uuid, p_user uuid, p_request uuid, p_hash text, p_source text) returns text
 language plpgsql security definer set search_path = '' as $$
-declare e jsonb := app.privacy_term_effective(p_tenant); v_id uuid;
+declare e jsonb := app.privacy_term_effective(p_tenant);
 begin
   if e is null then raise exception 'Termo de tratamento de dados indisponível no momento. Tente novamente em instantes.' using errcode = 'P0001'; end if;
   if p_hash is null or p_hash is distinct from e->>'hash' then
     raise exception 'Leia e aceite o termo de tratamento de dados vigente para enviar o cadastro.' using errcode = '22023';
   end if;
+  perform app.require(p_request is not null, 'Pedido de cadastro ausente.');
+  -- Um registro por pedido e versão: reenvio do mesmo pedido não duplica; pedido novo (após recusa) ganha o seu.
   if e->>'scope' = 'tenant' then
     insert into public.privacy_acknowledgements (tenant_id, user_id, access_request_id, privacy_term_id, term_version, term_hash, displayed_text_hash, tenant_name_shown, accepted_at, action_source, statement)
     values (p_tenant, p_user, p_request, (e->>'id')::uuid, e->>'version', e->>'template_hash', e->>'hash', e->>'tenant_name', app.now(), p_source,
       'Li e estou ciente do Termo de Tratamento de Dados Pessoais e das finalidades de utilização do Portal Portaria Prime.')
-    on conflict (tenant_id, user_id, privacy_term_id) do nothing returning id into v_id;
-    if v_id is null then
-      update public.privacy_acknowledgements set access_request_id = p_request
-       where tenant_id = p_tenant and user_id = p_user and privacy_term_id = (e->>'id')::uuid and access_request_id is null;
-    end if;
+    on conflict (access_request_id, privacy_term_id) where privacy_term_id is not null do nothing;
   else
     insert into public.privacy_acknowledgements (tenant_id, user_id, access_request_id, global_term_id, term_version, term_hash, displayed_text_hash, tenant_name_shown, accepted_at, action_source, statement)
     values (p_tenant, p_user, p_request, (e->>'id')::uuid, e->>'version', e->>'template_hash', e->>'hash', e->>'tenant_name', app.now(), p_source,
       'Li e estou ciente do Termo de Tratamento de Dados Pessoais e das finalidades de utilização do Portal Portaria Prime.')
-    on conflict (tenant_id, user_id, global_term_id) where global_term_id is not null do nothing returning id into v_id;
-    if v_id is null then
-      update public.privacy_acknowledgements set access_request_id = p_request
-       where tenant_id = p_tenant and user_id = p_user and global_term_id = (e->>'id')::uuid and access_request_id is null;
-    end if;
+    on conflict (access_request_id, global_term_id) where global_term_id is not null do nothing;
   end if;
   return e->>'version';
 end $$;
@@ -334,7 +333,7 @@ language sql stable security definer set search_path = '' as $$
     (select jsonb_build_object('status', case when r.status = 'approved' and not exists (
         select 1 from public.tenant_memberships m where m.tenant_id = r.tenant_id and m.user_id = auth.uid() and m.role = 'morador' and m.status = 'active')
         then 'revoked' else r.status end,
-      'full_name', r.full_name, 'block_text', r.block_text, 'unit', r.unit_text,
+      'full_name', r.full_name, 'phone', r.phone, 'block_text', r.block_text, 'unit', r.unit_text,
       'unit_text', concat_ws(' ', r.block_text, r.unit_text), 'reason', r.reason, 'created_at', r.created_at, 'decided_at', r.decided_at,
       'privacy_version', (select a.term_version from public.privacy_acknowledgements a where a.access_request_id = r.id order by a.accepted_at desc limit 1),
       'email', (select email from auth.users where id = auth.uid()))

@@ -134,6 +134,14 @@ test('cadastro do morador: termo global, uma etapa, avisos e isolamento', async 
     const rj = await db.rpc(admA, 'decide_access_request', { p_request: rc.request_id, p_approve: false, p_unit: null, p_reason: 'Unidade não identificada' });
     assert.equal(rj.status, 'rejected');
     assert.equal((await db.sql("select count(*)::int n from notification_jobs where event='access_decision' and ref_id=$1", [rc.request_id]))[0].n, 2);
+    // Reenvio após recusa com a MESMA versão do termo: pedido novo tem o próprio aceite e pode ser aprovado.
+    const rc2 = await db.rpc(caio, 'request_access', { p_slug: 'aurora', p_full_name: 'Caio Prado', p_phone: '21987654321', p_block: 'A', p_unit: '101', p_privacy_hash: tA.hash });
+    assert.notEqual(rc2.request_id, rc.request_id);
+    assert.equal((await db.sql('select count(*)::int n from privacy_acknowledgements where access_request_id = $1', [rc2.request_id]))[0].n, 1, 'aceite do pedido novo');
+    assert.equal((await db.sql('select count(*)::int n from privacy_acknowledgements where access_request_id = $1', [rc.request_id]))[0].n, 1, 'aceite do recusado preservado');
+    await db.rpc(caio, 'request_access', { p_slug: 'aurora', p_full_name: 'Caio Prado', p_phone: '21987654321', p_block: 'A', p_unit: '101', p_privacy_hash: tA.hash });
+    assert.equal((await db.sql('select count(*)::int n from privacy_acknowledgements where access_request_id = $1', [rc2.request_id]))[0].n, 1, 'reenvio do pendente não duplica');
+    assert.equal((await db.rpc(admA, 'decide_access_request', { p_request: rc2.request_id, p_approve: true, p_unit: null, p_reason: null })).status, 'approved');
     // Síndico de B não decide pedido de A.
     await assert.rejects(db.rpc(admB, 'decide_access_request', { p_request: r1.request_id, p_approve: true, p_unit: null, p_reason: null }), /Somente/);
     // Pendente não lê dados do condomínio.

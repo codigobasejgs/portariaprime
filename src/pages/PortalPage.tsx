@@ -332,7 +332,7 @@ export function RequestAccessPage({ slug }: { slug: string }) {
   // Recusado/encerrado: reaproveita o que já foi informado; revisão: o que o servidor guardou do cadastro.
   const d = review?.draft;
   const initial: Partial<SignupForm> = d ? { name: d.full_name, phone: maskPhone(d.phone || ''), block: d.block || '', unit: d.unit || '' }
-    : req ? { name: req.full_name || '', block: req.block_text || '', unit: req.unit || '' }
+    : req ? { name: req.full_name || '', phone: maskPhone(req.phone || ''), block: req.block_text || '', unit: req.unit || '' }
     : { name: String(session.user.user_metadata?.full_name || '') };
   return (
     <PortalShell portal={portal}>

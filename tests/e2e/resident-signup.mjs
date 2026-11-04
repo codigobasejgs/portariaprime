@@ -192,6 +192,15 @@ try {
   await r.getByRole('button', { name: 'Acompanhar minha solicitação' }).click();
   await r.getByText(/não foi aprovada: Unidade não confere/).waitFor();
   assert.equal(await r.getByLabel('Nome completo').inputValue(), 'Duda Ramos');
+  assert.equal(await r.getByLabel('Celular / WhatsApp').inputValue(), '(31) 99123-4567', 'celular do pedido anterior');
+  await r.getByRole('checkbox').check();
+  await r.getByRole('button', { name: 'Enviar meu cadastro' }).click();
+  await r.getByRole('heading', { name: 'Cadastro recebido com sucesso!' }).waitFor();
+  const [duda2] = (await call(sindico, 'list_access_requests', { p_tenant: T, p_status: 'pending' })).filter((x) => x.full_name === 'Duda Ramos');
+  assert.ok(duda2.privacy_version, 'reenvio com aceite próprio');
+  assert.equal((await call(sindico, 'decide_access_request', { p_request: duda2.id, p_approve: true, p_unit: null, p_reason: null })).status, 'approved');
+  await r.getByRole('button', { name: 'Acompanhar minha solicitação' }).click();
+  await r.waitForURL(new RegExp(`/c/${slug}/inicio`));
 
   step('isolamento: conta do condomínio A no portal B vê só as unidades e o termo de B');
   await r.goto(`${APP}/c/${slugB}/solicitar`);
