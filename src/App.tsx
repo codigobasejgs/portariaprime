@@ -6,6 +6,7 @@ import { matchTenant, navigate, onLink, query, usePath } from './lib/router';
 import { Alert, Button, Card, Spinner, Toaster } from './components/ui';
 import { PortariaPrimeLogo } from './components/Brand';
 import { TourProvider } from './components/TourGuide';
+import { isKioskApp, kioskLogin } from './lib/kiosk-shift';
 
 // Telas de login/app carregam sob demanda: a landing pública não paga por elas.
 const auth = () => import('./pages/auth/AuthPages');
@@ -59,10 +60,21 @@ function Redirect({ to }: { to: string }) {
   return <Spinner />;
 }
 
+/** Conta sem vínculo de equipe neste condomínio aberta no quiosque (ex.: morador): não entra na operação. */
+function KioskStaffOnly({ slug, signOut }: { slug: string; signOut: () => Promise<void> }) {
+  return <main className="min-h-dvh grid place-items-center px-4"><div className="max-w-sm space-y-4 text-center">
+    <PortariaPrimeLogo />
+    <h1 className="text-xl font-semibold">Aparelho exclusivo da portaria</h1>
+    <p className="text-sm text-muted">Entre com a conta de um porteiro ou do síndico deste condomínio. Moradores acessam pelo próprio celular, no link do portal.</p>
+    <Button className="w-full" onClick={async () => { await signOut(); navigate(kioskLogin(slug), true); }}>Sair e entrar com a conta da equipe</Button>
+  </div></main>;
+}
+
 function Routes() {
   const path = usePath();
   const { ctx, session, loading, error, refresh, signOut } = useSession();
   const route = matchTenant(path);
+  const kiosk = isKioskApp();
   if (path === '/contrato') return <Contrato />;
   if (path === '/termos') return <Termos />;
   if (path === '/privacidade') return <Privacidade />;
@@ -88,6 +100,10 @@ function Routes() {
   if (path === '/org/convite') return <Org />;
   // Portal do condomínio: página pública com a marca dele (sem sessão não há dados internos).
   // Sem sessão: link profundo do morador (aviso/e-mail/WhatsApp) vai ao login com a marca do portal e volta ao destino.
+  // Quiosque (app Android da portaria): só login da equipe, nunca o portal/cadastro do morador.
+  if (route && !session && kiosk) return <Redirect to={kioskLogin(route.slug, route.area)} />;
+  if (route && session && kiosk && ctx && !ctx.tenants.some(t => t.slug === route.slug && t.tenant_status === 'active' && (t.role === 'admin' || t.role === 'porteiro')))
+    return <KioskStaffOnly slug={route.slug} signOut={signOut} />;
   if (route && !session) return route.area && RESIDENT_AREAS.has(route.area)
     ? <Redirect to={`/entrar?next=${encodeURIComponent(location.pathname + location.search)}&portal=${route.slug}`} />
     : route.area ? <Redirect to={`/c/${route.slug}`} /> : <Portal slug={route.slug} />;

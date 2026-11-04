@@ -21,6 +21,7 @@ function PortalBranded({ slug, title, subtitle, children }: { slug: string; titl
     {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}<div className="mt-6">{children}</div></div></PortalShell>;
 }
 import { track } from '../../lib/funnel';
+import { isKioskApp } from '../../lib/kiosk-shift';
 
 const origin = () => location.origin;
 
@@ -52,8 +53,9 @@ export function LoginPage() {
     }
   };
 
+  const kiosk = isKioskApp();
   return (
-    <Branded title="Entrar" subtitle="Acesse sua portaria, seu condomínio ou suas encomendas.">
+    <Branded title={kiosk ? 'Entrar na portaria' : 'Entrar'} subtitle={kiosk ? 'Acesso da equipe: porteiro ou síndico deste condomínio.' : 'Acesse sua portaria, seu condomínio ou suas encomendas.'}>
       <form onSubmit={submit} className="space-y-4">
         <Field label="E-mail"><Input type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
         <Field label="Senha"><Input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
@@ -62,7 +64,8 @@ export function LoginPage() {
       </form>
       <div className="mt-6 space-y-2 text-sm">
         <p><a href="/recuperar-senha" onClick={onLink} className="text-secondary font-medium underline-offset-2 hover:underline">Esqueci minha senha</a></p>
-        {query('portal')
+        {kiosk ? <p className="text-muted text-xs">Aparelho exclusivo da portaria. Moradores acessam pelo próprio celular, no link do portal.</p>
+          : query('portal')
           ? <p className="text-muted">Mora aqui e não tem conta? <a href={`/cadastro?next=${encodeURIComponent(next)}&portal=${query('portal')}`} onClick={onLink} className="text-secondary font-medium hover:underline">Criar minha conta</a></p>
           : <><p className="text-muted">Novo por aqui? <a href="/cadastro" onClick={onLink} className="text-secondary font-medium hover:underline">Cadastrar meu condomínio</a></p>
             <p className="text-muted text-xs">Morador: abra o link do portal do seu condomínio para criar sua conta.</p></>}
@@ -72,11 +75,18 @@ export function LoginPage() {
 }
 
 export function SignupPage() {
+  // Quiosque não cria conta (nem de morador, nem de condomínio): equipe já existe e entra pelo login.
+  if (isKioskApp()) return <KioskNoSignup />;
   // Morador vindo do portal: cadastro completo em uma etapa (dados da unidade + termo junto com a conta).
   const slug = query('portal');
   const n = query('next') || '';
   if (slug && /^[a-z0-9-]{3,48}$/.test(slug) && n === `/c/${slug}/solicitar`) return <ResidentSignup slug={slug} />;
   return <AccountSignup />;
+}
+
+function KioskNoSignup() {
+  useEffect(() => { const p = query('portal'); navigate(`/entrar${p && /^[a-z0-9-]{3,48}$/.test(p) ? `?portal=${p}` : ''}`, true); }, []);
+  return <Spinner />;
 }
 
 function ResidentSignup({ slug }: { slug: string }) {

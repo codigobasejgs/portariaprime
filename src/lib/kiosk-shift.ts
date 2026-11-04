@@ -24,3 +24,15 @@ export async function kioskShift(event: 'shift.start' | 'shift.end'): Promise<vo
 }
 
 export const isKiosk = () => !!nonce();
+
+/**
+ * Aberto pelo app Android do quiosque (WebView marca o user agent; o nonce pode faltar antes do turno).
+ * Só ajusta a tela (login da equipe, sem cadastro de morador); permissões continuam no servidor.
+ */
+export const isKioskApp = () => isKiosk() || (typeof navigator !== 'undefined' && /\bPortariaPrimeKiosk\//.test(navigator.userAgent));
+
+/** Login da equipe no quiosque, voltando para a área de operação pedida (nunca área do morador). */
+export function kioskLogin(slug: string, area = '') {
+  const staff = /^(portaria|totem-equipe|painel|relatorios|pessoas|configuracoes|avisos|ajuda|comprovante|suporte|aplicativo)$/.test(area);
+  return `/entrar?next=${encodeURIComponent(`/c/${slug}/${staff ? area : 'portaria'}`)}&portal=${slug}`;
+}
