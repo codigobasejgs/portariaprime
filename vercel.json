@@ -4,6 +4,8 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
+    { "source": "/api/team/create", "destination": "/api/invitations/team-create?a=team-create" },
+    { "source": "/api/team/password", "destination": "/api/invitations/team-password?a=team-password" },
     { "source": "/api/contact", "destination": "/api/public/contact?a=contact" },
     { "source": "/api/funnel", "destination": "/api/public/funnel?a=funnel" },
     { "source": "/api/quote", "destination": "/api/public/quote?a=quote" },

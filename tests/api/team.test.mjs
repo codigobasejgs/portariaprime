@@ -1,7 +1,7 @@
 // Rota de acessos da equipe: regra de senha e recusa antes de qualquer chamada externa.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { passwordProblem } from '../../api/team/[action].ts';
+import { passwordProblem } from '../../api/invitations/_team.ts';
 import { createApiServer } from '../../scripts/dev-api.mjs';
 
 test('senha do acesso: tamanho, letras e números, nada trivial', () => {

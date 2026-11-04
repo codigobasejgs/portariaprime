@@ -5,7 +5,7 @@
  * Se o e-mail não estiver configurado, devolve o link para o gestor copiar —
  * nunca finge que enviou.
  */
-import { handler, json, readJson, isUuid, HttpError } from '../_lib/http.js';
+import { json, readJson, isUuid, HttpError } from '../_lib/http.js';
 import { requireUser, rpcError } from '../_lib/supabase.js';
 import { appUrl } from '../_lib/env.js';
 import { sendEmail } from '../_lib/channels.js';
@@ -13,7 +13,7 @@ import { esc } from '../_lib/templates.js';
 
 const ROLES: Record<string, string> = { admin: 'administrador(a)', porteiro: 'porteiro(a)', morador: 'morador(a)' };
 
-export const POST = handler(async (request) => {
+export async function send(request: Request) {
   const b = await readJson(request, 4096);
   if (!isUuid(b.tenantId) || !ROLES[b.role] || typeof b.email !== 'string') throw new HttpError(400, 'Dados do convite inválidos.');
   if (b.unitId != null && !isUuid(b.unitId)) throw new HttpError(400, 'Unidade inválida.');
@@ -43,4 +43,4 @@ export const POST = handler(async (request) => {
     // Só devolve o link se o e-mail não pôde ser enviado, para envio manual pelo gestor.
     ...(sent.status === 'accepted' ? {} : { manualLink: link, emailError: sent.error }),
   });
-});
+}

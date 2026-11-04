@@ -1,12 +1,12 @@
 /**
  * Acessos da equipe com e-mail e senha definidos pelo síndico (sem convite por e-mail).
- *   POST /api/team/create   { tenantId, email, fullName, role, permissions?, password }
- *   POST /api/team/password { tenantId, userId, password }
+ *   POST /api/team/create   (vercel.json → /api/invitations/team-create)   { tenantId, email, fullName, role, permissions?, password }
+ *   POST /api/team/password (vercel.json → /api/invitations/team-password) { tenantId, userId, password }
  * Autorização SEMPRE no banco com a sessão do síndico (permissão 'team', só delega o que tem, login recente).
  * A service role só cria/atualiza o usuário no Auth e conclui o vínculo já autorizado. Nada é enviado por e-mail;
  * a senha não é registrada em log nem devolvida.
  */
-import { handler, json, readJson, isUuid, HttpError } from '../_lib/http.js';
+import { json, readJson, isUuid, HttpError } from '../_lib/http.js';
 import { requireUser, serviceClient, rpcError } from '../_lib/supabase.js';
 
 const PERMS = new Set(['team', 'approve', 'settings', 'billing']);
@@ -20,8 +20,7 @@ export function passwordProblem(p: unknown): string | null {
   return null;
 }
 
-export const POST = handler(async (request) => {
-  const action = new URL(request.url).pathname.split('/').pop();
+export async function team(request: Request, action: string) {
   const b = await readJson(request, 4096);
   if (!isUuid(b.tenantId)) throw new HttpError(400, 'Condomínio inválido.');
   const bad = passwordProblem(b.password);
@@ -70,4 +69,4 @@ export const POST = handler(async (request) => {
   }
 
   throw new HttpError(404, 'Ação desconhecida.');
-});
+}
