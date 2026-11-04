@@ -33,7 +33,11 @@ export function DivulgacaoCard() {
   const t = useTenant();
   const canEdit = t.can('settings');
   const name = t.branding?.display_name || t.tenant.name;
-  const link = portalLink(location.origin, t.tenant.slug);
+  // QR por bloco: o morador já chega com o bloco escolhido no cadastro (só o nome do bloco vai no link).
+  const [blocks, setBlocks] = useState<string[]>([]);
+  const [block, setBlock] = useState('');
+  useEffect(() => { void rpc<any>('portal_units', { p_slug: t.tenant.slug }).then((u) => setBlocks([...new Set((u?.units || []).map((x: any) => x.block).filter(Boolean) as string[])])).catch(() => {}); }, [t.tenant.slug]);
+  const link = portalLink(location.origin, t.tenant.slug, block || null);
   const logo = useLogo(publicLogoUrl(t.branding?.logo_path));
   const [model, setModel] = useState<Model>('cartaz');
   const [saved, setSaved] = useState<Record<string, Partial<Texts>> | null>(null);
@@ -73,12 +77,13 @@ export function DivulgacaoCard() {
     const v = await rpc<Record<string, Partial<Texts>>>('divulgacao_save', { p_tenant: t.tenant.id, p_model: model, p_texts: {} });
     setSaved(v || {});
   }, 'Textos padrão restaurados.');
-  const png = () => run(async () => download(fileName(t.tenant.slug, model, 'png'), new Uint8Array(await (await toPng(canvas.current!)).arrayBuffer()), 'image/png'));
-  const pdf = () => run(async () => download(fileName(t.tenant.slug, model, 'pdf'), await toPdf(canvas.current!, model, `${texts.title} — ${name}`), 'application/pdf'));
+  const fileSlug = block ? `${t.tenant.slug}-bloco-${block.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` : t.tenant.slug;
+  const png = () => run(async () => download(fileName(fileSlug, model, 'png'), new Uint8Array(await (await toPng(canvas.current!)).arrayBuffer()), 'image/png'));
+  const pdf = () => run(async () => download(fileName(fileSlug, model, 'pdf'), await toPdf(canvas.current!, model, `${texts.title} — ${name}`), 'application/pdf'));
   const copy = (s: string, ok: string) => run(async () => { await navigator.clipboard.writeText(s); }, ok);
   const share = () => run(async () => {
     const blob = await toPng(canvas.current!);
-    const file = new File([blob], fileName(t.tenant.slug, model, 'png'), { type: 'image/png' });
+    const file = new File([blob], fileName(fileSlug, model, 'png'), { type: 'image/png' });
     const data: ShareData = (navigator as any).canShare?.({ files: [file] }) ? { files: [file], title: texts.title, text: msg } : { title: texts.title, text: msg, url: link };
     try { await navigator.share(data); } catch (e: any) { if (e?.name !== 'AbortError') throw e; }
   });
@@ -90,6 +95,14 @@ export function DivulgacaoCard() {
         <p className="text-sm text-muted">Cartazes e mensagens com o QR Code do portal dos moradores. O QR leva só ao endereço público ({link.replace(/^https?:\/\//, '')}); o cadastro continua exigindo conta, termo de dados e aprovação.</p>
       </div>
       {loadError && <Alert tone="warning">{loadError} Os textos padrão estão sendo usados.</Alert>}
+      {blocks.length > 0 && <div className="space-y-1">
+        <p className="text-sm font-medium">QR Code de</p>
+        <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="QR Code de">
+          {['', ...blocks].map((b) => <button key={b || 'geral'} type="button" role="radio" aria-checked={block === b} onClick={() => setBlock(b)}
+            className={`min-h-9 px-3 rounded-full text-sm border ${block === b ? 'bg-primary text-primary-fg border-primary' : 'border-line hover:bg-surface-2'}`}>{b ? `Bloco ${b}` : 'Entrada (todos os blocos)'}</button>)}
+        </div>
+        <p className="text-xs text-muted">Imprima um para a entrada e um para cada bloco: o morador que lê o QR do bloco já chega com o bloco escolhido.</p>
+      </div>}
 
       <div role="radiogroup" aria-label="Modelo" className="grid grid-cols-2 lg:grid-cols-4 gap-2">
         {MODELS.map((m) => (

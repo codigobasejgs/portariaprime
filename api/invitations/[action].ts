@@ -14,5 +14,6 @@ export const POST = handler(async (request) => {
   if (action === 'send') return send(request);
   if (action === 'team-create') return team(request, 'create');
   if (action === 'team-password') return team(request, 'password');
+  if (action === 'team-resident-reset') return team(request, 'resident-reset');
   throw new HttpError(404, 'Ação desconhecida.');
 });

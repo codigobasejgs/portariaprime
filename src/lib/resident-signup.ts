@@ -21,7 +21,7 @@ export const validEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(no
 export const fullName = (v: string) => v.trim().replace(/\s+/g, ' ');
 export const validFullName = (v: string) => /^\S{2,}(\s+\S+)+$/.test(fullName(v));
 
-export interface SignupForm { name: string; email: string; phone: string; block: string; unit: string; unitFree: string; password: string; password2: string; accepted: boolean }
+export interface SignupForm { name: string; email: string; phone: string; block: string; unit: string; unitFree: string; relation: string; password: string; password2: string; accepted: boolean }
 export type UnitOpt = { block: string | null; label: string };
 export type Errors = Partial<Record<keyof SignupForm | 'term', string>>;
 
@@ -38,6 +38,7 @@ export function validate(f: SignupForm, hasBlocks: boolean, units: UnitOpt[], ha
   if (!f.unit.trim()) e.unit = 'Escolha ou informe a unidade.';
   else if (f.unit === OTHER) { if (!f.unitFree.trim()) e.unitFree = 'Informe a sua unidade.'; }
   else if (units.length && !units.some((u) => (u.block || '') === (hasBlocks ? f.block : '') && u.label === f.unit)) e.unit = 'Escolha uma unidade da lista.';
+  if (!RELATIONS.some(([k]) => k === f.relation)) e.relation = 'Escolha o seu perfil na unidade.';
   if (account && f.password.length < 10) e.password = 'Use pelo menos 10 caracteres.';
   if (account && f.password2 !== f.password) e.password2 = 'As senhas não conferem.';
   if (!hasTerm) e.term = 'Termo de dados indisponível no momento. Tente novamente em instantes.';
@@ -54,3 +55,10 @@ export const OTHER = '__outra__';
 /** Blocos distintos na ordem do cadastro do condomínio. */
 export const blocksOf = (units: UnitOpt[]) => [...new Set(units.map((u) => u.block).filter(Boolean) as string[])];
 export const unitsOf = (units: UnitOpt[], block: string, hasBlocks: boolean) => units.filter((u) => (hasBlocks ? u.block === block : true));
+
+/** Nome de bloco aceito no link do QR do bloco (?bloco=); mesmo limite do cadastro de unidades. */
+export const BLOCK_PARAM = /^[\p{L}\p{N} ._-]{1,30}$/u;
+
+/** Perfil na unidade (obrigatório no cadastro; o síndico vê na fila e nos relatórios). */
+export const RELATIONS: [string, string][] = [['proprietario', 'Proprietário(a)'], ['locatario', 'Locatário(a) / inquilino(a)'], ['dependente', 'Dependente / familiar'], ['funcionario', 'Funcionário(a) da unidade'], ['outro', 'Outro']];
+export const relationLabel = (k?: string | null) => RELATIONS.find(([v]) => v === k)?.[1] || null;

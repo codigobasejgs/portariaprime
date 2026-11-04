@@ -3,7 +3,7 @@ import { Copy, MoreVertical, Plus, Upload } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { api, rpc } from '../../lib/api';
 import { useRealtime, useRefreshWhileVisible, useTenant } from '../../lib/tenant';
-import { maskPhone } from '../../lib/resident-signup';
+import { maskPhone, relationLabel } from '../../lib/resident-signup';
 import { navigate, onLink } from '../../lib/router';
 import { parseCsv, unitName } from '../../lib/format';
 import { blockNames } from '../../lib/units-generate';
@@ -275,11 +275,19 @@ function NewUnitModal({ onClose, onDone }: { onClose: () => void; onDone: () => 
 function ResidentsTab({ members, invites, unitsById, canApprove, onChanged }: {
   members: any[] | null; invites: any[]; unitsById: Record<string, UnitRow>; canApprove: boolean; onChanged: () => void;
 }) {
+  const t = useTenant();
   const [q, setQ] = useState('');
   const [limit, setLimit] = useState(PAGE);
   const { run } = useAction();
   if (!members) return <Spinner />;
   const residents = members.filter((m) => m.role === 'morador');
+  const resetPw = (m: any) => {
+    if (!confirm(`Enviar a ${m.full_name || m.email} um e-mail com o link para criar uma nova senha? Você não vê nem define a senha do morador.`)) return;
+    run(async () => {
+      const r = await api<{ email: string }>('/api/team/resident-reset', { tenantId: t.tenant.id, userId: m.user_id });
+      toast.success(`Link enviado para ${r.email}.`);
+    });
+  };
   const unitsOf = (m: any) => (m.units || []).filter((x: any) => x.status === 'active').map((x: any) => unitName(x.block, x.label)).join(', ');
   const needle = q.trim().toLowerCase();
   const shown = residents.filter((m) => `${m.full_name || ''} ${m.email} ${unitsOf(m)}`.toLowerCase().includes(needle));
@@ -312,6 +320,7 @@ function ResidentsTab({ members, invites, unitsById, canApprove, onChanged }: {
                       <p className="text-muted truncate">{m.email} · {us || 'sem unidade ativa'}</p>
                     </div>
                     {canApprove && <RowMenu label={`Ações de ${m.full_name || m.email}`} items={[
+                      ...(m.status === 'active' ? [{ label: 'Enviar link de nova senha', onClick: () => resetPw(m) }] : []),
                       { label: m.status === 'active' ? 'Revogar acesso' : 'Reativar acesso', danger: m.status === 'active', onClick: () => toggle(m) },
                     ]} />}
                   </li>
@@ -470,7 +479,7 @@ function AccessRequests({ units, onDecided }: { units: UnitRow[]; onDecided: () 
             <li key={r.id} className="py-3 space-y-2 text-sm">
               <p><strong>{r.full_name}</strong> <span className="text-muted">{r.email}{r.phone ? ` · ${maskPhone(r.phone)}` : ''}</span>
                 {r.email_verified === false && <> <Badge tone="warning">e-mail não confirmado</Badge></>}</p>
-              <p>Informou: <strong>{[r.block_text, r.unit_text].filter(Boolean).join(' ')}</strong> · {new Date(r.created_at).toLocaleString('pt-BR')}
+              <p>Informou: <strong>{[r.block_text, r.unit_text].filter(Boolean).join(' ')}</strong>{relationLabel(r.relation) && <> · {relationLabel(r.relation)}</>} · {new Date(r.created_at).toLocaleString('pt-BR')}
                 {r.status !== 'pending' && <> · <Badge tone={r.status === 'approved' ? 'success' : 'danger'}>{r.status === 'approved' ? 'aprovada' : 'recusada'}</Badge>{r.reason ? ` ${r.reason}` : ''}</>}</p>
               <p>{r.privacy_version
                 ? <Badge tone="success">Termo de dados {r.privacy_version} aceito em {new Date(r.privacy_accepted_at).toLocaleString('pt-BR')}</Badge>

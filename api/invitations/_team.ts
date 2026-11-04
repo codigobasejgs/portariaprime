@@ -8,6 +8,7 @@
  */
 import { json, readJson, isUuid, HttpError } from '../_lib/http.js';
 import { requireUser, serviceClient, rpcError } from '../_lib/supabase.js';
+import { appUrl } from '../_lib/env.js';
 
 const PERMS = new Set(['team', 'approve', 'settings', 'billing']);
 
@@ -23,6 +24,18 @@ export function passwordProblem(p: unknown): string | null {
 export async function team(request: Request, action: string) {
   const b = await readJson(request, 4096);
   if (!isUuid(b.tenantId)) throw new HttpError(400, 'Condomínio inválido.');
+
+  // Síndico envia ao morador o link oficial de nova senha (o síndico nunca vê nem define a senha do morador).
+  if (action === 'resident-reset') {
+    if (!isUuid(b.userId)) throw new HttpError(400, 'Morador inválido.');
+    const { client } = await requireUser(request);
+    const { data, error } = await client.rpc('resident_password_reset_check', { p_tenant: b.tenantId, p_user: b.userId });
+    if (error) rpcError(error);
+    const { error: se } = await client.auth.resetPasswordForEmail(data.email, { redirectTo: `${appUrl()}/nova-senha` });
+    if (se) throw new HttpError(se.status === 429 ? 429 : 502, se.status === 429 ? 'Muitos envios seguidos. Aguarde alguns minutos.' : 'O provedor de e-mail não confirmou o envio. Tente novamente.');
+    return json({ ok: true, email: data.email_masked });
+  }
+
   const bad = passwordProblem(b.password);
   if (bad) throw new HttpError(400, bad);
   const { client, user } = await requireUser(request);

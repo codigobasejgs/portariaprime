@@ -4,6 +4,8 @@ import { rpc } from '../../lib/api';
 import { useTenant } from '../../lib/tenant';
 import { onLink, query } from '../../lib/router';
 import { dateTime, download, STATUS_LABEL, toCsv, unitName } from '../../lib/format';
+import { RELATIONS, relationLabel } from '../../lib/resident-signup';
+import { parseReportQuery } from '../../lib/report-query';
 import { Alert, Badge, Button, Card, Empty, Field, Input, Select, Spinner, toast } from '../../components/ui';
 
 /**
@@ -55,6 +57,16 @@ function PackagesReport({ opt }: { opt: Opt }) {
     received_from: oldOnly ? '' : ymd(tz, -29), received_to: oldOnly ? ymd(tz, -3) : ymd(tz), status: query('status') || (oldOnly ? 'PENDENTES' : ''),
   }));
   const [advanced, setAdvanced] = useState(false);
+  const [ask, setAsk] = useState('');
+  const [asked, setAsked] = useState<{ understood: string[]; ignored: string[]; ranking: number | null } | null>(null);
+  const rankRef = React.useRef<HTMLDivElement>(null);
+  const runAsk = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ask.trim()) return;
+    const r = parseReportQuery(ask, { today: ymd(tz), blocks: opt.blocks, units: opt.units, carriers: opt.carriers });
+    setF(r.filters); setAsked(r);
+    if (r.ranking) setTimeout(() => rankRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 600);
+  };
   const [rows, setRows] = useState<any[] | null>(null);
   const [sum, setSum] = useState<any>(null);
   const [more, setMore] = useState(false);
@@ -144,6 +156,15 @@ function PackagesReport({ opt }: { opt: Opt }) {
   return (
     <div className="space-y-4">
       {oldOnly && <Alert tone="info">Mostrando encomendas aguardando há mais de 72 h. <a className="underline" href={`/c/${t.tenant.slug}/relatorios`} onClick={onLink}>Limpar filtro</a></Alert>}
+      <Card className="space-y-2">
+        <form onSubmit={runAsk} className="flex flex-wrap gap-2 items-end">
+          <div className="flex-1 min-w-[14rem]"><Field label="Pergunte ao relatório" hint='Ex.: "pendentes do apartamento 204 do bloco A", "ranking das 10 unidades que mais receberam no ano", "retiradas em março"'>
+            <Input value={ask} maxLength={200} onChange={(e) => setAsk(e.target.value)} /></Field></div>
+          <Button type="submit" disabled={!ask.trim()}>Buscar</Button>
+        </form>
+        {asked && <p className="text-xs text-muted" role="status">{asked.understood.length ? <>Entendi: <strong>{asked.understood.join(' · ')}</strong>. Os filtros abaixo foram preenchidos e podem ser ajustados.</> : 'Não identifiquei filtros nessa pergunta. Use os campos abaixo.'}
+          {asked.ignored.length > 0 && <> Não usei: {asked.ignored.join(', ')}.</>}</p>}
+      </Card>
       <Card className="space-y-3" data-tour="painel-exportar">
         <div className="flex flex-wrap gap-2">{presets.map(([l, fn]) => <Button key={l} variant="secondary" className="min-h-9 text-xs" onClick={fn}>{l}</Button>)}</div>
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -188,7 +209,7 @@ function PackagesReport({ opt }: { opt: Opt }) {
       </div>}
       {sum && sum.total > 0 && <div className="grid lg:grid-cols-2 gap-3">
         <Bars title="Por transportadora / origem" items={sum.by_carrier.map((x: any) => [x.carrier, x.n])} />
-        <Bars title="Unidades que mais receberam" items={sum.top_units.map((x: any) => [x.unit || '—', x.n])} />
+        <div ref={rankRef}><Bars title={`Unidades que mais receberam${asked?.ranking ? ` (top ${Math.min(asked.ranking, 10)})` : ''}`} items={sum.top_units.slice(0, asked?.ranking || 10).map((x: any) => [x.unit || '—', x.n])} /></div>
       </div>}
       <Card>
         {!rows ? <Spinner /> : rows.length === 0 ? <Empty title="Nenhuma encomenda com esses filtros" /> : (
@@ -237,7 +258,7 @@ function Bars({ title, items }: { title: string; items: [string, number][] }) {
 
 function ResidentsReport({ opt }: { opt: Opt }) {
   const t = useTenant();
-  const [f, setF] = useState<Partial<Record<'block' | 'unit' | 'status' | 'occupancy' | 'search', string>>>({});
+  const [f, setF] = useState<Partial<Record<'block' | 'unit' | 'status' | 'occupancy' | 'search' | 'relation', string>>>({});
   const [rows, setRows] = useState<any[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -257,8 +278,8 @@ function ResidentsReport({ opt }: { opt: Opt }) {
     return { units: unitsSet.size, occupied: [...unitsSet.values()].filter(Boolean).length,
       active: rows.filter((r) => r.status === 'active').length, pending: rows.filter((r) => r.status === 'pending').length };
   }, [rows]);
-  const COLS: [string, string][] = [['unit', 'Unidade'], ['full_name', 'Morador'], ['status_label', 'Situação'], ['email', 'E-mail'], ['phone', 'Celular'], ['since_fmt', 'Desde']];
-  const shape = (r: any) => ({ ...r, unit: unitName(r.block, r.label), status_label: r.status ? RES_STATUS[r.status][0] : 'Sem morador', since_fmt: r.since ? dateTime(r.since, t.tenant.timezone) : '' });
+  const COLS: [string, string][] = [['unit', 'Unidade'], ['full_name', 'Morador'], ['relation_label', 'Perfil'], ['status_label', 'Situação'], ['email', 'E-mail'], ['phone', 'Celular'], ['since_fmt', 'Desde']];
+  const shape = (r: any) => ({ ...r, unit: unitName(r.block, r.label), status_label: r.status ? RES_STATUS[r.status][0] : 'Sem morador', relation_label: relationLabel(r.relation) || '', since_fmt: r.since ? dateTime(r.since, t.tenant.timezone) : '' });
   const exp = async (type: 'csv' | 'xlsx' | 'pdf') => {
     setBusy(type);
     try {
@@ -279,10 +300,11 @@ function ResidentsReport({ opt }: { opt: Opt }) {
   return (
     <div className="space-y-4">
       <Card className="space-y-3">
-        <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-6 gap-3">
           {opt.blocks.length > 0 && <Field label="Bloco"><Select value={f.block || ''} onChange={set('block')}><option value="">Todos</option>{opt.blocks.map((b) => <option key={b}>{b}</option>)}</Select></Field>}
           <Field label="Unidade"><Select value={f.unit || ''} onChange={set('unit')}><option value="">Todas</option>{units.map((u) => <option key={u.id} value={u.id}>{unitName(u.block, u.label)}</option>)}</Select></Field>
           <Field label="Situação do morador"><Select value={f.status || ''} onChange={set('status')}><option value="">Todas</option>{Object.entries(RES_STATUS).map(([k, [l]]) => <option key={k} value={k}>{l}</option>)}</Select></Field>
+          <Field label="Perfil"><Select value={f.relation || ''} onChange={set('relation')}><option value="">Todos</option>{RELATIONS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Select></Field>
           <Field label="Ocupação"><Select value={f.occupancy || ''} onChange={set('occupancy')}><option value="">Todas as unidades</option><option value="with">Com morador ativo</option><option value="without">Sem morador cadastrado</option></Select></Field>
           <Field label="Buscar"><Input value={f.search || ''} maxLength={80} onChange={set('search')} placeholder="Nome, e-mail, unidade" /></Field>
         </div>
@@ -306,7 +328,7 @@ function ResidentsReport({ opt }: { opt: Opt }) {
                 {rows.map((r, i) => (
                   <tr key={`${r.unit_id}-${r.user_id || i}`}>
                     <td className="py-2 pr-3 pl-4 sm:pl-0 whitespace-nowrap">{unitName(r.block, r.label)}{!r.unit_active && <span className="text-xs text-muted"> (inativa)</span>}</td>
-                    <td className="pr-3">{r.full_name || <span className="text-muted">—</span>}</td>
+                    <td className="pr-3">{r.full_name || <span className="text-muted">—</span>}{relationLabel(r.relation) && <span className="block text-xs text-muted">{relationLabel(r.relation)}</span>}</td>
                     <td className="pr-3">{r.status ? <Badge tone={RES_STATUS[r.status][1]}>{RES_STATUS[r.status][0]}</Badge> : <span className="text-muted">Sem morador</span>}</td>
                     <td className="pr-3 text-xs break-all">{r.email}{r.phone && <span className="block text-muted">{r.phone}</span>}</td>
                     <td className="text-xs text-muted whitespace-nowrap">{r.since ? dateTime(r.since, t.tenant.timezone) : ''}</td>

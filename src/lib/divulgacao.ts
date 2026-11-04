@@ -1,6 +1,7 @@
 // Central de divulgação: modelos de cartaz/comunicado com o QR e o link PÚBLICOS do condomínio.
 // Nenhum segredo entra no QR: só https://{host}/c/{slug} (o portal exige login e aprovação).
 import QRCode from 'qrcode';
+import { BLOCK_PARAM } from './resident-signup';
 
 export type Model = 'cartaz' | 'comunicado' | 'whatsapp' | 'elevador';
 export interface Texts { title: string; subtitle: string; body: string; cta: string }
@@ -40,14 +41,19 @@ export function cleanTexts(t: Partial<Texts>): Partial<Texts> {
   return out;
 }
 
-/** Link público canônico do condomínio (o mesmo do PortalCard). */
-export const portalLink = (origin: string, slug: string) => `${origin.replace(/\/+$/, '')}/c/${slug}`;
+export { BLOCK_PARAM };
 
-/** Garante que o QR leve só o endereço público do portal: nada de query, hash, token ou convite. */
+/** Link público canônico do condomínio (o mesmo do PortalCard). Com bloco: QR daquele bloco. */
+export const portalLink = (origin: string, slug: string, block?: string | null) =>
+  `${origin.replace(/\/+$/, '')}/c/${slug}${block ? `?bloco=${encodeURIComponent(block)}` : ''}`;
+
+/** Garante que o QR leve só o endereço público do portal: no máximo ?bloco= (nada de token, convite ou hash). */
 export function assertPublicLink(link: string) {
   const u = new URL(link);
   if (u.protocol !== 'https:' && !/^(127\.0\.0\.1|localhost)$/.test(u.hostname)) throw new Error('O link do portal precisa ser HTTPS.');
-  if (!/^\/c\/[a-z0-9][a-z0-9-]{1,46}[a-z0-9]$/.test(u.pathname) || u.search || u.hash || u.username || u.password) throw new Error('O QR só pode conter o endereço público do portal.');
+  const params = [...u.searchParams.keys()];
+  const okQuery = !u.search || (params.length === 1 && params[0] === 'bloco' && BLOCK_PARAM.test(u.searchParams.get('bloco') || ''));
+  if (!/^\/c\/[a-z0-9][a-z0-9-]{1,46}[a-z0-9]$/.test(u.pathname) || !okQuery || u.hash || u.username || u.password) throw new Error('O QR só pode conter o endereço público do portal.');
   return link;
 }
 

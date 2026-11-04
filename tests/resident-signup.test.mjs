@@ -21,10 +21,12 @@ test('nome e e-mail', () => {
 
 test('formulário: obrigatórios, bloco quando há blocos, unidade da lista, senhas e termo', () => {
   const units = [{ block: 'A', label: '101' }, { block: 'A', label: '102' }, { block: 'B', label: '201' }];
-  const ok = { name: 'Ana Souza', email: 'ana@x.com', phone: '(11) 98888-7777', block: 'A', unit: '101', unitFree: '', password: 'SenhaForte1', password2: 'SenhaForte1', accepted: true };
+  const ok = { name: 'Ana Souza', email: 'ana@x.com', phone: '(11) 98888-7777', block: 'A', unit: '101', unitFree: '', relation: 'proprietario', password: 'SenhaForte1', password2: 'SenhaForte1', accepted: true };
   assert.deepEqual(validate(ok, true, units, true), {});
   const e = validate({ ...ok, name: 'Ana', email: 'x', phone: '1', block: '', unit: '', password: 'curta', password2: 'outra', accepted: false }, true, units, true);
   assert.deepEqual(Object.keys(e).sort(), ['accepted', 'block', 'email', 'name', 'password', 'password2', 'phone', 'unit']);
+  assert.ok(validate({ ...ok, relation: '' }, true, units, true).relation, 'perfil obrigatório');
+  assert.ok(validate({ ...ok, relation: 'invasor' }, true, units, true).relation, 'perfil fora da lista recusado');
   assert.deepEqual(Object.keys(validate({ ...ok, email: '', password: '' , password2: 'x' }, true, units, true, false)), [], 'logado: sem e-mail/senha');
   assert.ok(validate({ ...ok, block: 'B', unit: '101' }, true, units, true).unit, 'unidade de outro bloco recusada');
   assert.ok(validate({ ...ok, unit: OTHER }, true, units, true).unitFree, 'fora da lista exige o texto');

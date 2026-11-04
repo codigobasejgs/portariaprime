@@ -14,6 +14,12 @@ test('link público: só /c/{slug}, HTTPS, sem query/hash/credenciais', () => {
     'https://x.com/convite?token=abc', 'https://x.com/c/abc/solicitar', 'https://x.com/c/AB']) {
     assert.throws(() => assertPublicLink(bad), /HTTPS|endereço público/, bad);
   }
+  // QR por bloco: só ?bloco= com nome de bloco simples; nada além disso.
+  assert.equal(portalLink('https://x.com', 'abc', 'Bloco 2'), 'https://x.com/c/abc?bloco=Bloco%202');
+  assert.ok(assertPublicLink(portalLink('https://x.com', 'abc', 'Ipê')));
+  for (const bad of ['https://x.com/c/abc?bloco=A&convite=1', 'https://x.com/c/abc?bloco=%3Cscript%3E', 'https://x.com/c/abc?bloco=' + 'A'.repeat(31), 'https://x.com/c/abc?bloco=']) {
+    assert.throws(() => assertPublicLink(bad), /endereço público/, bad);
+  }
 });
 
 test('QR decodifica exatamente para o link público', () => {

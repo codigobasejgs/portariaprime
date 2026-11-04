@@ -7,7 +7,7 @@ import { useSession } from '../lib/session';
 import { applyTheme, publicLogoUrl } from '../lib/theme';
 import { Alert, Button, Field, Input, Select, Spinner } from '../components/ui';
 import { usePwaInstall } from '../hooks/usePwaInstall';
-import { blocksOf, Errors, fullName, maskPhone, normEmail, OTHER, phoneE164, SignupForm, UnitOpt, unitsOf, unitValue, validate } from '../lib/resident-signup';
+import { BLOCK_PARAM, RELATIONS, blocksOf, Errors, fullName, maskPhone, normEmail, OTHER, phoneE164, SignupForm, UnitOpt, unitsOf, unitValue, validate } from '../lib/resident-signup';
 
 export interface Portal { slug: string; name: string; logo_path: string | null; color_primary: string | null; color_secondary: string | null; color_accent: string | null; status: string }
 
@@ -71,7 +71,9 @@ export function PortalPage({ slug }: { slug: string }) {
   // Já conectado com outra conta (equipe, outro condomínio): "Entrar" troca de conta; nunca abre o cadastro.
   const enter = async () => { if (session) await signOut(); navigate(`/entrar?next=${next}&portal=${slug}`); };
   // "Criar minha conta" abre direto o cadastro completo (conta + unidade + termo).
-  const signup = () => navigate(session ? `${here}/solicitar` : `/cadastro?next=${next}&portal=${slug}`);
+  const bloco = new URLSearchParams(location.search).get('bloco');
+  const blocoQ = bloco && BLOCK_PARAM.test(bloco) ? `&bloco=${encodeURIComponent(bloco)}` : '';
+  const signup = () => navigate(session ? `${here}/solicitar` : `/cadastro?next=${next}&portal=${slug}${blocoQ}`);
   const ua = typeof navigator === 'undefined' ? '' : navigator.userAgent;
   const ios = /iPhone|iPad|iPod/.test(ua);
   return (
@@ -119,7 +121,7 @@ export function PortalPage({ slug }: { slug: string }) {
 
 type Term = { version: string; title: string; content: string; hash: string };
 type Units = { has_blocks: boolean; units: UnitOpt[] };
-const EMPTY: SignupForm = { name: '', email: '', phone: '', block: '', unit: '', unitFree: '', password: '', password2: '', accepted: false };
+const EMPTY: SignupForm = { name: '', email: '', phone: '', block: '', unit: '', unitFree: '', relation: '', password: '', password2: '', accepted: false };
 
 /** Formulário completo do morador, em uma etapa. account=true cria a conta (signUp); false = já logado. */
 function ResidentForm({ slug, account, initial, notice, onDone }: {
@@ -139,6 +141,10 @@ function ResidentForm({ slug, account, initial, notice, onDone }: {
     void loadTerm();
     supabase.rpc('portal_units', { p_slug: slug }).then(({ data, error: e }) => setUnits(e ? null : (data || { has_blocks: false, units: [] })));
   }, [slug]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Bloco do QR que não existe neste condomínio: ignora.
+  useEffect(() => {
+    if (units?.has_blocks && f.block && !units.units.some((u) => u.block === f.block)) setF((x) => ({ ...x, block: '', unit: '' }));
+  }, [units]); // eslint-disable-line react-hooks/exhaustive-deps
   // Rascunho/pedido anterior com unidade fora da lista: vira "não está na lista" + texto.
   useEffect(() => {
     if (!units?.units.length || !f.unit || f.unit === OTHER) return;
@@ -166,7 +172,7 @@ function ResidentForm({ slug, account, initial, notice, onDone }: {
         const email = normEmail(f.email);
         // Dados do cadastro vão com a conta: o servidor guarda e cria o pedido no 1º login (sem pedir de novo).
         const { data, error: se } = await supabase.auth.signUp({ email, password: f.password, options: {
-          data: { full_name: name, pp_signup: { slug, full_name: name, phone, block, unit, privacy_hash: term!.hash } },
+          data: { full_name: name, pp_signup: { slug, full_name: name, phone, block, unit, relation: f.relation, privacy_hash: term!.hash } },
           emailRedirectTo: `${location.origin}${login}`,
         } });
         if (se && !/registered|exists/i.test(se.message)) throw se;
@@ -178,6 +184,7 @@ function ResidentForm({ slug, account, initial, notice, onDone }: {
         onDone({ session: !!data.session, email });
       } else {
         await rpc('request_access', { p_slug: slug, p_full_name: name, p_phone: phone, p_block: block, p_unit: unit, p_privacy_hash: term!.hash });
+        await rpc('access_request_set_relation', { p_slug: slug, p_relation: f.relation });
         onDone({ session: true, email: '' });
       }
     } catch (err: any) {
@@ -217,6 +224,8 @@ function ResidentForm({ slug, account, initial, notice, onDone }: {
       )}
       {f.unit === OTHER && <Field label="Informe sua unidade" hint="A administração confere antes de aprovar." error={errors.unitFree}>
         <Input maxLength={30} value={f.unitFree} onChange={set('unitFree')} /></Field>}
+      <Field label="Seu perfil na unidade" error={errors.relation}>
+        <Select value={f.relation} onChange={set('relation')}><option value="">Selecione</option>{RELATIONS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Select></Field>
       {account && <>
         <Field label="Senha" hint="Mínimo de 10 caracteres." error={errors.password}><Input type="password" autoComplete="new-password" value={f.password} onChange={set('password')} /></Field>
         <Field label="Confirme a senha" error={errors.password2}><Input type="password" autoComplete="new-password" value={f.password2} onChange={set('password2')} /></Field>
@@ -252,6 +261,12 @@ function ResidentForm({ slug, account, initial, notice, onDone }: {
 }
 
 /** /cadastro a partir do portal: conta + dados do morador + aceite, em uma tela só. */
+/** Bloco vindo do QR do bloco (?bloco=); o formulário só o usa se existir entre os blocos do condomínio. */
+const qrBlock = (): Partial<SignupForm> | undefined => {
+  const b = new URLSearchParams(location.search).get('bloco');
+  return b && BLOCK_PARAM.test(b) ? { block: b } : undefined;
+};
+
 export function ResidentSignupPage({ slug }: { slug: string }) {
   const { portal, error: perr } = usePortal(slug);
   // Sem sessão (confirmação de e-mail ligada): a tela de recebido sobrevive ao F5 nesta aba.
@@ -270,7 +285,7 @@ export function ResidentSignupPage({ slug }: { slug: string }) {
     <PortalShell portal={portal}>
       <h2 className="text-2xl font-semibold">Criar minha conta</h2>
       <p className="mt-1 text-sm text-muted">Preencha uma vez. A administração do {portal.name} confere os dados e libera seu acesso.</p>
-      <ResidentForm slug={slug} account onDone={({ session, email }) => {
+      <ResidentForm slug={slug} account initial={qrBlock()} onDone={({ session, email }) => {
         // Com sessão (confirmação automática): quem navega é o efeito do /cadastro ao ver a sessão no contexto
         // (navegar aqui chegaria antes dela e a rota sem sessão devolveria ao portal). Lá o cadastro é finalizado.
         if (session) return;
