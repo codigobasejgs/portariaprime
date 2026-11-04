@@ -31,6 +31,9 @@ export function ReceiptLayoutCard() {
       .catch((e) => setError(e.message));
   }, [t.tenant.id]);
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
+  // Hook antes de qualquer return: com o layout ainda carregando, o número de hooks mudava (React #310).
+  const dirty = !!f && JSON.stringify(f) !== JSON.stringify(saved);
+  useUnsaved(dirty);
   if (!t.can('settings')) return null;
   if (!f) return error ? <Alert tone="danger">{error}</Alert> : null;
   const set = (k: keyof Layout, v: any) => setF({ ...f, [k]: v });
@@ -52,9 +55,6 @@ export function ReceiptLayoutCard() {
     if (preview) URL.revokeObjectURL(preview);
     setPreview(URL.createObjectURL(await res.blob()));
   });
-  const dirty = JSON.stringify(f) !== JSON.stringify(saved);
-  useUnsaved(dirty);
-
   return (
     <Card className="space-y-4" data-tour="config-comprovante">
       <div><p className="font-semibold">Identidade e comprovantes</p>
