@@ -109,9 +109,10 @@ Equipe Portaria Prime`,
       const r = ctx.resident || {};
       const portal = `${appUrl}/c/${encodeURIComponent(ctx.tenant_slug)}`;
       return {
-        subject: 'Recebemos seu cadastro — Portaria Prime',
-        intro: `Olá, ${r.name || 'morador(a)'}. Recebemos sua solicitação de cadastro no ${ctx.tenant_name}. Sua solicitação foi encaminhada para análise da administração. Assim que seu cadastro for aprovado, você receberá uma confirmação com o link de acesso ao aplicativo Portaria Prime.`,
-        whatsapp: `Olá, ${wa(r.name || 'morador(a)')}!\n\nRecebemos seu cadastro no Portaria Prime do *${wa(ctx.tenant_name)}*.\n\nSua solicitação está aguardando aprovação da administração.\n\nVocê será informado quando seu acesso estiver liberado.`,
+        // Marca do condomínio do morador (multi-tenant); Portaria Prime só no rodapé discreto.
+        subject: `Recebemos seu cadastro — ${ctx.tenant_name}`,
+        intro: `Olá, ${r.name || 'morador(a)'}. Recebemos sua solicitação de cadastro no ${ctx.tenant_name}. Sua solicitação foi encaminhada para análise da administração. Assim que seu cadastro for aprovado, você receberá uma confirmação com o link de acesso ao aplicativo do condomínio.`,
+        whatsapp: `Olá, ${wa(r.name || 'morador(a)')}!\n\nRecebemos seu cadastro no *${wa(ctx.tenant_name)}*.\n\nSua solicitação está aguardando aprovação da administração.\n\nVocê será informado quando seu acesso estiver liberado.`,
         lines: [['Condomínio', ctx.tenant_name], ['Unidade informada', r.unit], ['Situação', 'Aguardando aprovação']],
         cta: ['Acompanhar minha solicitação', `${portal}/solicitar`],
       };
@@ -123,9 +124,9 @@ Equipe Portaria Prime`,
       const portal = `${appUrl}/c/${encodeURIComponent(ctx.tenant_slug)}`;
       const name = r.name || 'morador(a)';
       return ok ? {
-        subject: 'Bem-vindo ao Portaria Prime!',
-        intro: `Olá, ${name}. Seu cadastro no ${ctx.tenant_name} foi aprovado! Agora você pode acessar o Portaria Prime para acompanhar suas encomendas e correspondências. Utilize seu e-mail e a senha cadastrada.`,
-        whatsapp: `Olá, ${wa(name)}! 👋\n\nSeja bem-vindo ao Portaria Prime!\n\nSeu cadastro no *${wa(ctx.tenant_name)}* foi aprovado.\n\nVocê já pode acessar o aplicativo e acompanhar suas encomendas.\n\n📱 Acesse: ${portal}\n\nEntre com seu e-mail e senha cadastrados.`,
+        subject: `Bem-vindo ao ${ctx.tenant_name}!`,
+        intro: `Olá, ${name}. Seu cadastro no ${ctx.tenant_name} foi aprovado! Agora você pode acessar o aplicativo do condomínio para acompanhar suas encomendas e correspondências. Utilize seu e-mail e a senha cadastrada.`,
+        whatsapp: `Olá, ${wa(name)}! 👋\n\nSeja bem-vindo ao *${wa(ctx.tenant_name)}*!\n\nSeu cadastro foi aprovado.\n\nVocê já pode acessar o aplicativo e acompanhar suas encomendas.\n\n📱 Acesse: ${portal}\n\nEntre com seu e-mail e senha cadastrados.`,
         lines: [['Condomínio', ctx.tenant_name], ['Unidade', r.unit]], cta: ['Acessar o aplicativo', portal],
       } : {
         subject: `Cadastro não aprovado — ${ctx.tenant_name}`,

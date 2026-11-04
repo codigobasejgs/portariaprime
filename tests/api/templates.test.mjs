@@ -12,11 +12,12 @@ const B = { ...A, tenant_name: 'Condomínio Boreal', tenant_slug: 'boreal', colo
 
 test('cadastro recebido: e-mail, texto e WhatsApp com nome, condomínio e link próprio', () => {
   const m = render('access_received', A, {}, APP);
-  assert.equal(m.subject, 'Recebemos seu cadastro — Portaria Prime');
+  assert.equal(m.subject, 'Recebemos seu cadastro — Residencial Aurora');
+  assert.ok(!/Portaria Prime/.test(m.subject + m.intro + m.whatsapp), 'marca do condomínio, não da plataforma');
   assert.match(m.intro, /^Olá, Ana\. Recebemos sua solicitação de cadastro no Residencial Aurora/);
   assert.equal(m.cta[1], `${APP}/c/aurora/solicitar`);
   assert.match(m.whatsapp, /Olá, Ana!/);
-  assert.match(m.whatsapp, /\*Residencial Aurora\*/);
+  assert.match(m.whatsapp, /Recebemos seu cadastro no \*Residencial Aurora\*/);
   assert.match(m.whatsapp, /aguardando aprovação/);
   const txt = emailText(A, m);
   assert.match(txt, /Acompanhar minha solicitação: https:\/\/portariaprime\.com\.br\/c\/aurora\/solicitar/);
@@ -25,7 +26,13 @@ test('cadastro recebido: e-mail, texto e WhatsApp com nome, condomínio e link p
 
 test('aprovado: uma mensagem (aprovação + boas-vindas) por canal, link do portal, sem senha/token', () => {
   const m = render('access_decision', A, { approved: true }, APP);
-  assert.equal(m.subject, 'Bem-vindo ao Portaria Prime!');
+  assert.equal(m.subject, 'Bem-vindo ao Residencial Aurora!');
+  assert.match(m.whatsapp, /Seja bem-vindo ao \*Residencial Aurora\*!/);
+  assert.ok(!/Portaria Prime/.test(m.subject + m.intro + m.whatsapp), 'boas-vindas com o nome do condomínio');
+  // Outro condomínio: o próprio nome, sem nada do primeiro.
+  const mb = render('access_decision', B, { approved: true }, APP);
+  assert.equal(mb.subject, 'Bem-vindo ao Condomínio Boreal!');
+  assert.ok(!/Aurora/.test(mb.subject + mb.intro + mb.whatsapp));
   assert.match(m.intro, /cadastro no Residencial Aurora foi aprovado/);
   assert.equal(m.cta[1], `${APP}/c/aurora`);
   assert.match(m.whatsapp, /📱 Acesse: https:\/\/portariaprime\.com\.br\/c\/aurora\n/);
