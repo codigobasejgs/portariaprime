@@ -17,3 +17,6 @@ docs/legado/readme-prototipo.txt
 # Evidências de teste geradas
 tests/evidence/
 dist-stack/
+
+# Mídia bruta de campanha (fora do site; só os vídeos de public/video vão para o deploy)
+media/

@@ -71,6 +71,14 @@ export default function LandingPage() {
   const [menu, setMenu] = useState(false);
   const [zoom, setZoom] = useState<Screen | null>(null);
   const [step, setStep] = useState(0);
+  // Vídeo demonstrativo no formato da tela: vertical (9:16) no celular, horizontal (16:9) no resto.
+  const [demo, setDemo] = useState<'16x9' | '9x16'>(() => (typeof matchMedia !== 'undefined' && matchMedia('(max-width: 639px)').matches ? '9x16' : '16x9'));
+  useEffect(() => {
+    const mq = matchMedia('(max-width: 639px)');
+    const on = () => setDemo(mq.matches ? '9x16' : '16x9');
+    mq.addEventListener?.('change', on);
+    return () => mq.removeEventListener?.('change', on);
+  }, []);
   const [profile, setProfile] = useState<keyof typeof DEMO>('sindico');
   const pricingRef = useRef<HTMLElement>(null);
 
@@ -151,6 +159,19 @@ export default function LandingPage() {
               </div>
               <figcaption className="mt-2 sm:mt-10 text-xs text-porcelain/60">Telas reais com dados de demonstração. Toque para ampliar.</figcaption>
             </figure>
+          </div>
+        </section>
+
+        {/* Vídeo demonstrativo: horizontal no computador, vertical no celular. Só carrega ao tocar (preload="none"). */}
+        <section id="video" className="max-w-6xl mx-auto px-4 pt-16" aria-labelledby="video-h">
+          <h2 id="video-h" className="text-3xl font-semibold">Veja o Portaria Prime em 1 minuto</h2>
+          <p className="text-muted mt-2">Da chegada da encomenda ao comprovante de retirada, com as telas reais do sistema.</p>
+          <div className="mt-6 rounded-2xl overflow-hidden border border-line bg-midnight shadow-sm mx-auto max-w-sm sm:max-w-none">
+            <video key={demo} className="block w-full h-auto" controls playsInline preload="none"
+              poster={`/video/demonstracao-${demo}.webp`} aria-label="Vídeo demonstrativo do Portaria Prime"
+              style={{ aspectRatio: demo === '16x9' ? '16 / 9' : '9 / 16' }}>
+              <source src={`/video/demonstracao-${demo}.mp4`} type="video/mp4" />
+            </video>
           </div>
         </section>
 

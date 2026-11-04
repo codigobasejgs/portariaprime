@@ -14,7 +14,7 @@
     { "source": "/c/:slug/manifest.webmanifest", "destination": "/api/portal/manifest?a=manifest&slug=:slug" },
     { "source": "/c/:slug", "destination": "/api/portal/page?a=page&slug=:slug" },
     { "source": "/c/:slug/:path*", "destination": "/api/portal/page?a=page&slug=:slug" },
-    { "source": "/((?!api/|assets/|brand/|screens/|kiosk/|sw\\.js|manifest\\.webmanifest|robots\\.txt|sitemap\\.xml|.*\\.(?:png|webp|ico|js|css|webmanifest)$).*)", "destination": "/index.html" }
+    { "source": "/((?!api/|assets/|brand/|screens/|kiosk/|video/|sw\\.js|manifest\\.webmanifest|robots\\.txt|sitemap\\.xml|.*\\.(?:png|webp|ico|js|css|webmanifest)$).*)", "destination": "/index.html" }
   ],
   "headers": [
     {
@@ -28,6 +28,7 @@
     },
     { "source": "/(c|app|admin|onboarding|convite|entrar|cadastro|recuperar-senha|nova-senha|checkout|proposta|contratar|org|validar)(.*)", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }] },
     { "source": "/screens/(.*)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400" }] },
+    { "source": "/video/(.*)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=604800" }] },
     { "source": "/sw.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
     { "source": "/api/(.*)", "headers": [{ "key": "Cache-Control", "value": "no-store" }] },
     { "source": "/kiosk/(.*)", "headers": [{ "key": "Content-Type", "value": "application/vnd.android.package-archive" }, { "key": "Cache-Control", "value": "public, max-age=300" }, { "key": "X-Robots-Tag", "value": "noindex" }] }
