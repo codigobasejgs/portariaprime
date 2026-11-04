@@ -1,14 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Download, Package, PackageCheck, Tablet, UserCheck } from 'lucide-react';
+import { Package, PackageCheck, Tablet, UserCheck } from 'lucide-react';
 import { rpc } from '../../lib/api';
 import { useTenant } from '../../lib/tenant';
 import { navigate, onLink, query } from '../../lib/router';
-import { dateTime, download, STATUS_LABEL, toCsv, unitName } from '../../lib/format';
-import { listAllPackages, listPackages, PackageRow } from '../../lib/packages';
-import { Alert, Button, Card, Empty, Field, Input, Select, Spinner, toast } from '../../components/ui';
+import { dateTime } from '../../lib/format';
+import { Alert, Button, Card, Empty, Spinner } from '../../components/ui';
 import { Analysis } from './PainelAnalise';
 
-const ymd = (tz: string, delta = 0) => new Date(Date.now() + delta * 86400000).toLocaleDateString('en-CA', { timeZone: tz });
 const n = (v: unknown) => Number(v || 0).toLocaleString('pt-BR');
 
 function Kpi({ label, value, hint, href, tone }: { label: string; value: React.ReactNode; hint?: React.ReactNode; href?: string; tone?: 'warning' | 'danger' }) {
@@ -136,78 +134,6 @@ function Operation() {
         )}
       </Card>
       <p className="text-xs text-muted">Valores calculados no servidor, no fuso {d.timezone}. Atualizado em {dateTime(d.as_of, t.tenant.timezone)}.</p>
-    </div>
-  );
-}
-
-/** Relatórios: lista completa com filtros e exportação CSV (mesmos filtros). */
-export function RelatoriosPage() {
-  const t = useTenant();
-  const tz = t.tenant.timezone;
-  const oldOnly = query('antigas') === '1';
-  const [from, setFrom] = useState(oldOnly ? '' : ymd(tz, -29));
-  // “Antigas”: corta no servidor até 3 dias atrás; o corte exato de 72 h é aplicado na lista.
-  const [to, setTo] = useState(oldOnly ? ymd(tz, -3) : ymd(tz));
-  const [status, setStatus] = useState(query('status') || '');
-  const [rows, setRows] = useState<PackageRow[] | null>(null);
-  const [more, setMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [exporting, setExporting] = useState(false);
-  const cutoff = Date.now() - 72 * 3600_000;
-  const filt = (r: PackageRow[]) => (oldOnly ? r.filter((p) => new Date(p.received_at).getTime() <= cutoff) : r);
-  const params = { status: status || null, from: from || null, to: to || null };
-  const load = async () => {
-    setError(null); setRows(null);
-    try { const r = await listPackages(t.tenant.id, { ...params, limit: 50 }); setRows(filt(r)); setMore(r.length === 50); }
-    catch (e: any) { setError(e.message); }
-  };
-  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [from, to, status, t.tenant.id]);
-  const loadMore = async () => {
-    const last = rows![rows!.length - 1];
-    const r = await listPackages(t.tenant.id, { ...params, limit: 50 }, { at: last.received_at, id: last.id });
-    setRows([...rows!, ...filt(r)]); setMore(r.length === 50);
-  };
-  const exportCsv = async () => {
-    setExporting(true);
-    try {
-      const all = filt(await listAllPackages(t.tenant.id, params));
-      download(`encomendas-${t.tenant.slug}-${from || 'inicio'}-a-${to || 'hoje'}.csv`, toCsv(all.map((p) => ({
-        ...p, unit: unitName(p.unit_block, p.unit_label), status_label: STATUS_LABEL[p.status], received: dateTime(p.received_at, tz), picked: dateTime(p.picked_up_at, tz),
-      })), [['unit', 'Unidade'], ['carrier', 'Transportadora'], ['tracking_code', 'Rastreio'], ['recipient_name', 'Destinatário'], ['status_label', 'Situação'],
-        ['received', 'Recebida em'], ['storage_code', 'Local'], ['picked', 'Retirada em'], ['picked_up_by_name', 'Retirada por'], ['pickup_method', 'Validação'], ['resolution_reason', 'Motivo da exceção']]));
-    } catch (e: any) { toast.error(e.message); } finally { setExporting(false); }
-  };
-  return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">Relatórios</h1>
-      {oldOnly && <Alert tone="info">Mostrando encomendas aguardando há mais de 72 h. <a className="underline" href={`/c/${t.tenant.slug}/relatorios`} onClick={onLink}>Limpar filtro</a></Alert>}
-      <Card className="grid sm:grid-cols-4 gap-3 items-end" data-tour="painel-exportar">
-        <Field label="De"><Input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} /></Field>
-        <Field label="Até"><Input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} /></Field>
-        <Field label="Situação">
-          <Select value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="">Todas</option><option value="PENDENTES">Pendentes</option>
-            {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </Select>
-        </Field>
-        <Button variant="secondary" onClick={exportCsv} loading={exporting}><Download className="w-4 h-4" /> Exportar CSV</Button>
-      </Card>
-      {error && <Alert tone="danger">{error}</Alert>}
-      <Card>
-        {!rows ? <Spinner /> : rows.length === 0 ? <Empty title="Nenhuma encomenda com esses filtros" /> : (
-          <div className="overflow-x-auto -mx-4 sm:mx-0">
-            <table className="w-full text-sm min-w-[560px]">
-              <thead className="text-left text-muted"><tr><th className="py-2 px-4 sm:pl-0 font-medium">Unidade</th><th className="pr-3 font-medium">Transportadora</th><th className="pr-3 font-medium">Recebida</th><th className="pr-3 font-medium">Situação</th><th className="font-medium">Retirada por</th></tr></thead>
-              <tbody className="divide-y divide-line">
-                {rows.map((p) => (
-                  <tr key={p.id}><td className="py-2 px-4 sm:pl-0">{unitName(p.unit_block, p.unit_label)}</td><td className="pr-3">{p.carrier}</td><td className="pr-3 whitespace-nowrap">{dateTime(p.received_at, tz)}</td><td className="pr-3">{STATUS_LABEL[p.status]}</td><td>{p.picked_up_by_name || '—'}</td></tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {more && <Button variant="ghost" className="mt-2" onClick={loadMore}>Carregar mais</Button>}
-      </Card>
     </div>
   );
 }

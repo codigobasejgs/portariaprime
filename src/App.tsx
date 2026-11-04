@@ -31,7 +31,7 @@ const AppInfo = lazy(() => import('./pages/tenant/AppPage').then(m => ({ default
 const Comprovante = lazy(() => import('./pages/tenant/Receipt').then(m => ({ default: m.ReceiptPage })));
 const Avisos = lazy(() => import('./pages/tenant/MoradorPage').then(m => ({ default: m.AvisosPage })));
 const Painel = lazy(() => import('./pages/tenant/PainelPage').then(m => ({ default: m.PainelPage })));
-const Relatorios = lazy(() => import('./pages/tenant/PainelPage').then(m => ({ default: m.RelatoriosPage })));
+const Relatorios = lazy(() => import('./pages/tenant/RelatoriosPage').then(m => ({ default: m.RelatoriosPage })));
 const Pessoas = lazy(() => import('./pages/tenant/PessoasPage').then(m => ({ default: m.PessoasPage })));
 const Config = lazy(() => import('./pages/tenant/ConfigPage').then(m => ({ default: m.ConfigPage })));
 const Retorno = lazy(() => import('./pages/tenant/AssinaturaPage').then(m => ({ default: m.CheckoutReturnPage })));

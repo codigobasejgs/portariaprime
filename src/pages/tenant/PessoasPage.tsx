@@ -6,6 +6,7 @@ import { useRealtime, useRefreshWhileVisible, useTenant } from '../../lib/tenant
 import { maskPhone } from '../../lib/resident-signup';
 import { navigate, onLink } from '../../lib/router';
 import { parseCsv, unitName } from '../../lib/format';
+import { blockNames } from '../../lib/units-generate';
 import { loadUnits, UnitRow } from '../../lib/packages';
 import { Alert, Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, toast, useAction } from '../../components/ui';
 
@@ -115,11 +116,14 @@ function UnitsTab({ units, isAdmin, canApprove, onAdd, onImport, onInvite, onCha
   const t = useTenant();
   const [q, setQ] = useState('');
   const [limit, setLimit] = useState(PAGE);
+  const [generating, setGenerating] = useState(false);
+  const [blockFilter, setBlockFilter] = useState('');
   const { run } = useAction();
   const active = units.filter((u) => u.active).length;
+  const blocks = [...new Set(units.map((u) => u.block).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }));
   const max = (t.overview as any)?.entitlements?.max_units;
   const needle = q.trim().toLowerCase();
-  const shown = units.filter((u) => `${u.block || ''} ${u.label}`.toLowerCase().includes(needle));
+  const shown = units.filter((u) => (!blockFilter || u.block === blockFilter) && `${u.block || ''} ${u.label}`.toLowerCase().includes(needle));
   const toggle = (u: UnitRow) => {
     const name = unitName(u.block, u.label);
     const msg = u.active
@@ -138,11 +142,17 @@ function UnitsTab({ units, isAdmin, canApprove, onAdd, onImport, onInvite, onCha
         <p className="text-sm"><strong>{active}</strong> unidade(s) ativa(s){max ? <span className="text-muted"> de {max} no plano</span> : null}</p>
         {isAdmin && (
           <div className="flex flex-wrap gap-2">
+            <Button onClick={() => setGenerating(true)}><Plus className="w-4 h-4" /> Montar blocos e apartamentos</Button>
+            <Button variant="secondary" onClick={onAdd} data-tour="unidades-form">Nova unidade</Button>
             <Button variant="secondary" onClick={onImport} data-tour="unidades-importar"><Upload className="w-4 h-4" /> Importar CSV</Button>
-            <Button onClick={onAdd} data-tour="unidades-form"><Plus className="w-4 h-4" /> Nova unidade</Button>
           </div>
         )}
       </div>
+      {blocks.length > 0 && <div className="flex flex-wrap gap-1" role="group" aria-label="Filtrar por bloco">
+        {['', ...blocks].map((b) => <button key={b || 'todos'} aria-pressed={blockFilter === b} onClick={() => { setBlockFilter(b); setLimit(PAGE); }}
+          className={`min-h-9 px-3 rounded-full text-sm border ${blockFilter === b ? 'bg-primary text-primary-fg border-primary' : 'border-line hover:bg-surface-2'}`}>
+          {b ? `Bloco ${b}` : 'Todos'} <span className="opacity-70">{units.filter((u) => !b || u.block === b).length}</span></button>)}
+      </div>}
       <Input aria-label="Buscar unidade" placeholder="Buscar por bloco ou unidade" value={q} onChange={(e) => { setQ(e.target.value); setLimit(PAGE); }} />
       {shown.length === 0
         ? <Empty title={units.length ? 'Nenhuma unidade encontrada' : 'Nenhuma unidade cadastrada'}>{units.length ? null : 'Use “Nova unidade” ou importe uma planilha.'}</Empty>
@@ -160,7 +170,75 @@ function UnitsTab({ units, isAdmin, canApprove, onAdd, onImport, onInvite, onCha
           </ul>
         )}
       {shown.length > limit && <Button variant="ghost" onClick={() => setLimit(limit + PAGE)}>Mostrar mais ({shown.length - limit} restantes)</Button>}
+      {generating && <GenerateUnitsModal onClose={() => setGenerating(false)} onDone={() => { setGenerating(false); onChanged(); }} />}
     </Card>
+  );
+}
+
+function GenerateUnitsModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const t = useTenant();
+  const [style, setStyle] = useState<'numero' | 'letra' | 'nome' | 'sem'>('letra');
+  const [count, setCount] = useState(2);
+  const [names, setNames] = useState('');
+  const [mode, setMode] = useState<'floors' | 'range'>('floors');
+  const [s, setS] = useState({ floor_from: '1', floor_to: '10', per_floor: '4', from: '1', to: '40', prefix: '' });
+  const [preview, setPreview] = useState<any>(null);
+  const { busy, run } = useAction();
+  const blocks = blockNames(style, count, names);
+  const spec = () => ({ mode, blocks, ...(mode === 'floors' ? { floor_from: s.floor_from, floor_to: s.floor_to, per_floor: s.per_floor } : { from: s.from, to: s.to }), prefix: s.prefix });
+  const total = blocks.length * (mode === 'floors'
+    ? Math.max(0, (+s.floor_to - +s.floor_from + 1)) * Math.max(0, +s.per_floor)
+    : Math.max(0, +s.to - +s.from + 1));
+  const check = () => run(async () => setPreview(await rpc('units_generate', { p_tenant: t.tenant.id, p_spec: spec(), p_dry_run: true })));
+  const save = () => run(async () => {
+    const r = await rpc<any>('units_generate', { p_tenant: t.tenant.id, p_spec: spec(), p_dry_run: false });
+    if (r.errors?.length) { setPreview(r); throw new Error('Nada foi gravado: corrija os itens indicados.'); }
+    onDone();
+  }, 'Unidades cadastradas.');
+  const field = (k: keyof typeof s, label: string, w = 'w-24') => <Field label={label}>
+    <Input type={k === 'prefix' ? 'text' : 'number'} inputMode={k === 'prefix' ? 'text' : 'numeric'} className={w} min={0} value={s[k]} maxLength={10}
+      onChange={(e) => { setS({ ...s, [k]: e.target.value }); setPreview(null); }} /></Field>;
+  return (
+    <Modal title="Montar blocos e apartamentos" onClose={onClose} wide>
+      <div className="space-y-4">
+        <fieldset className="space-y-2">
+          <legend className="font-medium text-sm">1. Como se chamam os blocos?</legend>
+          <div className="flex flex-wrap gap-2">{([['letra', 'Por letra (A, B…)'], ['numero', 'Por número (1, 2…)'], ['nome', 'Cada um com um nome'], ['sem', 'Sem blocos']] as const).map(([k, l]) =>
+            <label key={k} className={`min-h-10 px-3 rounded-xl border text-sm inline-flex items-center gap-2 cursor-pointer ${style === k ? 'border-primary bg-surface-2' : 'border-line'}`}>
+              <input type="radio" name="style" checked={style === k} onChange={() => { setStyle(k); setPreview(null); }} />{l}</label>)}</div>
+          {(style === 'letra' || style === 'numero') && <Field label="Quantos blocos?"><Input type="number" className="w-24" min={1} max={60} value={count} onChange={(e) => { setCount(+e.target.value || 1); setPreview(null); }} /></Field>}
+          {style === 'nome' && <Field label="Nomes dos blocos" hint="Um por linha ou separados por vírgula. Ex.: Ipê, Jacarandá, Manacá">
+            <textarea className="w-full min-h-20 rounded-xl border border-line bg-surface px-3 py-2 text-sm" value={names} onChange={(e) => { setNames(e.target.value); setPreview(null); }} /></Field>}
+          {style !== 'sem' && <p className="text-xs text-muted">Blocos: {blocks.join(', ') || '—'}</p>}
+        </fieldset>
+        <fieldset className="space-y-2">
+          <legend className="font-medium text-sm">2. Como são os apartamentos? (iguais em todos os blocos)</legend>
+          <div className="flex flex-wrap gap-2">{([['floors', 'Por andar (101, 102… 201…)'], ['range', 'Sequência (1, 2, 3… ou Casa 1…)']] as const).map(([k, l]) =>
+            <label key={k} className={`min-h-10 px-3 rounded-xl border text-sm inline-flex items-center gap-2 cursor-pointer ${mode === k ? 'border-primary bg-surface-2' : 'border-line'}`}>
+              <input type="radio" name="mode" checked={mode === k} onChange={() => { setMode(k); setPreview(null); }} />{l}</label>)}</div>
+          <div className="flex flex-wrap gap-3 items-end">
+            {mode === 'floors' ? <>{field('floor_from', 'Do andar')}{field('floor_to', 'até o andar')}{field('per_floor', 'Aptos por andar')}</>
+              : <>{field('from', 'Do número')}{field('to', 'até')}{field('prefix', 'Prefixo (opcional)', 'w-32')}</>}
+          </div>
+          {mode === 'floors' && <p className="text-xs text-muted">Numeração: andar × 100 + posição. Ex.: 1º andar com 4 aptos = 101 a 104; 10º andar = 1001 a 1004.</p>}
+        </fieldset>
+        <p className="text-sm">Serão criadas <strong>{total.toLocaleString('pt-BR')}</strong> unidade(s){blocks.length > 1 ? ` em ${blocks.length} blocos` : ''}.</p>
+        {total > 2000 && <Alert tone="warning">O máximo por vez é 2.000 unidades. Monte em partes (por exemplo, alguns blocos de cada vez).</Alert>}
+        {preview && <div className="space-y-2">
+          {preview.errors?.length > 0
+            ? <Alert tone="danger">{preview.errors.length} unidade(s) com problema (ex.: já cadastradas). Nada será gravado enquanto houver erro.<ul className="mt-1 text-xs">{preview.errors.slice(0, 8).map((e: any) => <li key={e.line}>Item {e.line}: {e.error}</li>)}</ul></Alert>
+            : <Alert tone="success">Conferido: {preview.valid} unidade(s) prontas para cadastrar.</Alert>}
+          <div className="max-h-40 overflow-y-auto rounded-xl bg-surface-2 p-3 text-xs flex flex-wrap gap-1">
+            {(preview.preview || []).map((u: any, i: number) => <span key={i} className="px-2 py-0.5 rounded-full bg-surface border border-line">{unitName(u.block, u.label)}</span>)}
+            {preview.count > 60 && <span className="text-muted">… e mais {preview.count - 60}</span>}
+          </div>
+        </div>}
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" loading={busy} disabled={!blocks.length || total < 1 || total > 2000} onClick={check}>Ver as unidades</Button>
+          <Button loading={busy} disabled={!preview || preview.errors?.length > 0 || preview.valid < 1} onClick={save}>Está certo, cadastrar</Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
