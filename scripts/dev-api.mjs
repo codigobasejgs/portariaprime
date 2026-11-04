@@ -14,6 +14,7 @@ const routes = {
   '/api/webhooks/infinitepay': '../api/webhooks/infinitepay.ts',
   '/api/jobs/tick': '../api/jobs/tick.ts',
   '/api/invitations/send': '../api/invitations/send.ts',
+  ...Object.fromEntries(['create', 'password'].map(action => [`/api/team/${action}`, '../api/team/[action].ts'])),
   '/api/ocr/analyze-label': '../api/ocr/analyze-label.ts',
   '/api/contact': '../api/public/[action].ts',
   '/api/funnel': '../api/public/[action].ts',
