@@ -12,6 +12,7 @@ import { QrCodeScanner } from '../../../components/QrCodeScanner';
 import { SignaturePad } from '../../../components/SignaturePad';
 import { CameraCapture } from '../../../components/CameraCapture';
 import { PackagePhotos } from '../../../components/PhotoGallery';
+import { DemoPhotoSample, DemoQrSample } from '../../../demo/samples';
 
 export type PickupPackage = PackageRow & {
   storage_rack?: string | null; storage_shelf?: string | null; concierge_name?: string | null;
@@ -36,7 +37,7 @@ export function ScanToPickup({ onFound }: { onFound: (pkg: PickupPackage, qr: st
   return (
     <div className="space-y-2">
       {scan ? <QrCodeScanner onDecode={decode} onClose={() => setScan(false)} /> : (
-        <Button onClick={() => setScan(true)} className="w-full sm:w-auto min-h-14 text-base"><QrCode className="w-5 h-5" /> Ler QR Code do morador</Button>
+        <><Button onClick={() => setScan(true)} className="w-full sm:w-auto min-h-14 text-base"><QrCode className="w-5 h-5" /> Ler QR Code do morador</Button> <DemoQrSample onPick={decode} /></>
       )}
       {error && <Alert tone="danger">{error}</Alert>}
     </div>
@@ -164,7 +165,7 @@ export function PickupModal({ pkg, qr, onClose, onDone }: { pkg: PickupPackage; 
               <img src={photoUrl} alt="Foto do item entregue" className="h-24 w-24 rounded-lg object-cover" />
               <Button variant="ghost" onClick={() => { setPhoto(null); setPhotoUrl(null); }}>Refazer foto</Button>
             </div>
-          ) : <CameraCapture onCapture={takePhoto} label="Fotografar item entregue" />}
+          ) : <><CameraCapture onCapture={takePhoto} label="Fotografar item entregue" /><DemoPhotoSample onPick={takePhoto} /></>}
         </div>
         {error && <Alert tone="danger">{error}</Alert>}
         <Button className="w-full min-h-14 text-base" loading={busy} onClick={confirm} disabled={!sig || !photo}>Confirmar entrega</Button>

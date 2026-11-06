@@ -10,7 +10,8 @@ import { setCaptureBusy } from '../../../lib/capture';
 import { CARRIERS, unitName } from '../../../lib/format';
 import { loadAvailability, locationName, matchUnits, StorageLoc, UnitRow } from '../../../lib/packages';
 import { Alert, Button, Card, Field, Input, Select, toast } from '../../../components/ui';
-import { GalleryPhoto, PhotoGallery, uploadGallery } from '../../../components/PhotoGallery';
+import { GalleryPhoto, PhotoGallery, preparePhoto, uploadGallery } from '../../../components/PhotoGallery';
+import { DemoLabelSample } from '../../../demo/samples';
 
 interface Match { status: 'matched' | 'unit_only' | 'conflict' | 'ambiguous' | 'name_only' | 'not_found'; unit_id: string | null; alerts: string[] }
 interface Ocr {
@@ -192,6 +193,7 @@ export function ReceiveForm({ units, storage, onDone, preregistered }: {
         <p className="font-semibold">1. Fotos <span className="text-muted font-normal">(opcional, até 8 — a primeira é a etiqueta)</span></p>
         <PhotoGallery photos={photos} onChange={setPhotos} locked={saved || busy} label={ocrEnabled ? 'Escanear etiqueta (câmera)' : 'Fotografar etiqueta'}
           onRetry={savedPackage.current ? () => formRef.current?.requestSubmit() : undefined} />
+        {!saved && !busy && photos.length < 8 && <DemoLabelSample onPick={async (b) => setPhotos([...photos, await preparePhoto(b)])} />}
         {photo && ocrEnabled && (
           <Button type="button" variant="secondary" onClick={() => runOcr()} loading={ocrBusy}><ScanText className="w-4 h-4" /> {ocr ? 'Ler etiqueta de novo' : 'Ler etiqueta automaticamente'}</Button>
         )}

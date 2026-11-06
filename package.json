@@ -24,6 +24,7 @@
     "test:pwa": "node tests/pwa-update.mjs",
     "test:signup": "node tests/e2e/resident-signup.mjs",
     "test:totem": "node tests/e2e/totem-flow.mjs",
+    "test:demo": "node tests/e2e/demo-offline.mjs",
     "test:android": "cd android && gradlew testDebugUnitTest lintDebug assembleDebug",
     "test:devices": "node tests/e2e/devices.mjs",
     "test:kiosk-lab": "bash tests/e2e/kiosk-device.sh && bash tests/e2e/kiosk-exit.sh && node tests/e2e/kiosk-webview.mjs && node tests/e2e/kiosk-flow.mjs && node tests/e2e/kiosk-security.mjs"

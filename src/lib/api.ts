@@ -1,5 +1,7 @@
 import { supabase } from './supabase';
 import { callApi, friendly } from './call-api';
+import { DEMO } from '../demo/mode';
+import { demoApi } from '../demo/api';
 
 export { friendly };
 
@@ -12,7 +14,7 @@ export async function rpc<T = any>(fn: string, args: Record<string, unknown> = {
 
 /** Chama nossa API serverless com o JWT do usuário. */
 export function api<T = any>(path: string, body?: unknown, method = 'POST'): Promise<T> {
-  return callApi<T>(supabase.auth, path, body, method);
+  return DEMO ? demoApi<T>(path, body) : callApi<T>(supabase.auth, path, body, method);
 }
 
 export const newKey = () => crypto.randomUUID();

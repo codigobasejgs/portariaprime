@@ -7,6 +7,8 @@ import { Alert, Button, Card, Spinner, Toaster } from './components/ui';
 import { PortariaPrimeLogo } from './components/Brand';
 import { TourProvider } from './components/TourGuide';
 import { isKioskApp, kioskLogin } from './lib/kiosk-shift';
+import { DEMO, profile, profilePath } from './demo/mode';
+import { DemoBar } from './demo/DemoBar';
 
 // Telas de login/app carregam sob demanda: a landing pública não paga por elas.
 const auth = () => import('./pages/auth/AuthPages');
@@ -75,6 +77,8 @@ function Routes() {
   const { ctx, session, loading, error, refresh, signOut } = useSession();
   const route = matchTenant(path);
   const kiosk = isKioskApp();
+  if (DEMO && path === '/demonstracao') return <Redirect to={profilePath(profile())} />;
+  if (DEMO && path === '/entrar') return <Redirect to="/demonstracao" />;
   if (path === '/contrato') return <Contrato />;
   if (path === '/termos') return <Termos />;
   if (path === '/privacidade') return <Privacidade />;
@@ -87,7 +91,7 @@ function Routes() {
   if (route?.area === 'totem') {
     if (loading) return <Spinner />;
     const staffHere = ctx?.tenants.some(t => t.slug === route.slug && t.tenant_status === 'active' && (t.role === 'admin' || t.role === 'porteiro'));
-    return staffHere ? <Redirect to={`/c/${route.slug}/totem-equipe`} /> : <Totem slug={route.slug} />;
+    return (DEMO || staffHere) ? <Redirect to={`/c/${route.slug}/totem-equipe`} /> : <Totem slug={route.slug} />;
   }
   // Landing pública: não espera a sessão; com sessão mostra "Acessar meu condomínio".
   if (path === '/') return <Landing />;
@@ -167,5 +171,5 @@ function Routes() {
 }
 
 export default function App() {
-  return <SessionProvider><Suspense fallback={<Spinner />}><Routes /></Suspense><Toaster /></SessionProvider>;
+  return <SessionProvider><Suspense fallback={<Spinner />}>{DEMO && <DemoBar />}<Routes /></Suspense><Toaster /></SessionProvider>;
 }

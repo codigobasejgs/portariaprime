@@ -108,8 +108,9 @@ export default function LandingPage() {
   };
   const selectable = (plans || []).filter((p) => p.published && !p.is_custom && p.prices.length);
   const custom = (plans || []).find((p) => p.is_custom);
-  const nav: [string, string][] = [['#como-funciona', 'Como funciona'], ['#demonstracao', 'Demonstração'], ['#portaria-exclusiva', 'Portaria Exclusiva'], ['/tutoriais', 'Tutoriais'], ['/planos', 'Planos e contrato']];
-  const navLink = ([h, l]: [string, string], extra = '') => h.startsWith('/')
+  const nav: [string, string][] = [['#como-funciona', 'Como funciona'], ['#demonstracao', 'Vídeo'], ['/demonstracao', 'Ver demonstração'], ['#portaria-exclusiva', 'Portaria Exclusiva'], ['/tutoriais', 'Tutoriais'], ['/planos', 'Planos e contrato']];
+  // /demonstracao precisa de carga completa da página (o modo demonstração é decidido antes do cliente existir).
+  const navLink = ([h, l]: [string, string], extra = '') => h.startsWith('/') && h !== '/demonstracao'
     ? <a key={h} href={h} onClick={(e) => { onLink(e); setMenu(false); }} className={extra}>{l}</a>
     : <a key={h} href={h} onClick={() => setMenu(false)} className={extra}>{l}</a>;
   const f = FLOW[step];
@@ -145,7 +146,7 @@ export default function LandingPage() {
               <p className="mt-4 text-lg text-porcelain/80 max-w-xl">Registre o que chegou, avise todos os moradores da unidade automaticamente e documente cada retirada com assinatura, foto e comprovante.</p>
               <div className="mt-8 flex flex-wrap gap-3">
                 <button onClick={() => trial()} className="min-h-12 px-6 rounded-xl bg-champagne text-midnight font-semibold hover:opacity-90">Testar grátis por 1 mês</button>
-                <a href="#demonstracao" className="min-h-12 px-6 rounded-xl border border-porcelain/40 inline-flex items-center font-semibold hover:bg-white/10">Ver a demonstração</a>
+                <a href="/demonstracao" className="min-h-12 px-6 rounded-xl border border-porcelain/40 inline-flex items-center font-semibold hover:bg-white/10">Ver demonstração</a>
               </div>
               <ul className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm text-porcelain/80">
                 {['Um mês de calendário grátis, sem cartão', 'Pagamento por link, sem débito automático', 'Funciona no navegador; instale se quiser'].map((t) =>
@@ -343,7 +344,8 @@ export default function LandingPage() {
                 })}
               </div>
             )}
-            <p className="mt-6 text-sm"><strong>{KIOSK.name}:</strong> {KIOSK.included} {KIOSK.pilot} <a href="#ativacao-piloto" className="underline">{KIOSK.cta}</a>.</p>
+            <p className="mt-6 text-sm">Quer ver antes de contratar? <a href="/demonstracao" className="font-semibold underline">Ver demonstração</a> com dados fictícios, sem cadastro.</p>
+            <p className="mt-2 text-sm"><strong>{KIOSK.name}:</strong> {KIOSK.included} {KIOSK.pilot} <a href="#ativacao-piloto" className="underline">{KIOSK.cta}</a>.</p>
             {custom && <p className="mt-2 text-sm"><strong>{custom.name}:</strong> {custom.description} <a href="#contato" className="underline">Fale com a gente</a>.</p>}
             <p className="mt-2 text-sm"><strong>Administradoras:</strong> carteira de condomínios com acesso consolidado e vínculo aprovado por cada síndico. Valor sob proposta, conforme número de condomínios, unidades e consumo. <a href="#proposta" className="underline">Pedir proposta</a>.</p>
             <p className="mt-4 text-xs text-muted">Franquias de leitura de etiqueta e WhatsApp são mensais e contam mensagens aceitas pelo provedor por destinatário; falhas e repetições não contam. Ao esgotar, a digitação manual e os avisos no app continuam; nada é cobrado a mais sem contratação. Contrato, termos e privacidade: <a href="/contrato" onClick={onLink} className="underline">contrato</a>, <a href="/termos" onClick={onLink} className="underline">termos</a>, <a href="/privacidade" onClick={onLink} className="underline">privacidade</a>.</p>
