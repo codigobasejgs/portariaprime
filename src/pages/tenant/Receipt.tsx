@@ -70,15 +70,19 @@ function ReceiptView({ packageId }: { packageId: string }) {
               <p className="text-xs font-mono text-right">{r.protocol}</p>
             </div>
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-              <dt style={{ color: '#526174' }}>Unidade</dt><dd className="text-right font-medium">{unitName(s.unit_block, s.unit_label)}</dd>
+              <dt style={{ color: '#526174' }}>Unidade</dt><dd className="text-right font-medium">{s.unit_text || unitName(s.unit_block, s.unit_label, t.unitLabels)}</dd>
               <dt style={{ color: '#526174' }}>Transportadora</dt><dd className="text-right">{s.carrier}</dd>
               <dt style={{ color: '#526174' }}>Rastreio</dt><dd className="text-right">{s.tracking_code || '—'}</dd>
               <dt style={{ color: '#526174' }}>Recebida em</dt><dd className="text-right">{dateTime(s.received_at, t.tenant.timezone)}</dd>
+              {(s.received_by_name || s.courier_name) && <>
+                <dt style={{ color: '#526174' }}>Recebido na portaria por</dt>
+                <dd className="text-right">{s.received_by_name || '—'}{s.courier_name ? ` (Entregador: ${s.courier_name})` : ''}</dd>
+              </>}
               <dt style={{ color: '#526174' }}>Retirada em</dt><dd className="text-right">{dateTime(s.picked_up_at, t.tenant.timezone)}</dd>
               <dt style={{ color: '#526174' }}>Retirada por</dt><dd className="text-right font-medium">{s.picked_up_by}</dd>
               {s.recipient_kind && <><dt style={{ color: '#526174' }}>Relação</dt><dd className="text-right">{s.recipient_kind === 'autorizado' ? 'Recebedor autorizado' : 'Morador'}</dd></>}
               {s.storage && <><dt style={{ color: '#526174' }}>Retirada de</dt><dd className="text-right">{s.storage}</dd></>}
-              <dt style={{ color: '#526174' }}>Entregue por</dt><dd className="text-right">{s.operator}</dd>
+              <dt style={{ color: '#526174' }}>Entregue ao morador por</dt><dd className="text-right">{s.operator}</dd>
               <dt style={{ color: '#526174' }}>Validação</dt><dd className="text-right">{s.method === 'qr' ? 'QR Code de uso único' : 'Manual (justificada)'}</dd>
             </dl>
             {s.manual_reason && <p className="text-xs" style={{ color: '#526174' }}>Justificativa: {s.manual_reason}</p>}

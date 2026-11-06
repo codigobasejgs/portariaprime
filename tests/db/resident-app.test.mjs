@@ -38,7 +38,7 @@ test('app do morador: isolamento, estados e contatos', async () => {
     assert.equal(empty.channels.email, true); assert.equal(empty.channels.push_devices, 0);
 
     // Duas aguardando (mais antiga primeiro), uma pré-registrada invisível, uma de outra unidade.
-    const recv = (unit, key, tracking) => db.rpc(port, 'receive_package', { p_tenant: T, p_idempotency_key: key, p_unit: unit, p_tracking: tracking, p_carrier: 'Correios' });
+    const recv = (unit, key, tracking) => db.rpc(port, 'receive_package', { p_tenant: T, p_idempotency_key: key, p_unit: unit, p_tracking: tracking, p_carrier: 'Correios', p_courier: 'Entregador Teste' });
     db.setNow('2026-03-08T12:00:00Z'); const old = await recv(u1, 'res-key-0001', 'BRVELHO');
     db.setNow('2026-03-10T12:00:00Z'); const fresh = await recv(u1, 'res-key-0002', 'BRNOVO');
     const outro = await recv(u2, 'res-key-0003', 'BROUTRA');

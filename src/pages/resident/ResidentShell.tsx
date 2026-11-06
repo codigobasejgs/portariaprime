@@ -85,12 +85,12 @@ export function ResidentShell({ area, children }: { area: string; children: Reac
               : <span className="h-9 w-9 rounded-lg bg-primary text-primary-fg grid place-items-center shrink-0"><Building2 className="w-5 h-5" aria-hidden /></span>}
             <div className="min-w-0 flex-1">
               <p className="font-semibold truncate leading-tight" title={name}>{name}</p>
-              {units.length === 1 && <p className="text-xs text-muted truncate">{unitName(units[0].block, units[0].label)}</p>}
+              {units.length === 1 && <p className="text-xs text-muted truncate">{unitName(units[0].block, units[0].label, t.unitLabels)}</p>}
               {units.length > 1 && (
                 <select aria-label="Unidade" value={current || ''} onChange={(e) => setUnit(e.target.value || null)}
                   className="text-xs text-muted bg-transparent max-w-full -ml-1 min-h-6 rounded focus:outline-none focus:ring-2 focus:ring-accent">
                   <option value="">Todas as minhas unidades</option>
-                  {units.map((u) => <option key={u.id} value={u.id}>{unitName(u.block, u.label)}</option>)}
+                  {units.map((u) => <option key={u.id} value={u.id}>{unitName(u.block, u.label, t.unitLabels)}</option>)}
                 </select>
               )}
             </div>

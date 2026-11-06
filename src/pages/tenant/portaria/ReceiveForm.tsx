@@ -1,6 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ScanText } from 'lucide-react';
 import { useTenant } from '../../../lib/tenant';
+import { useSession } from '../../../lib/session';
+import { supabase } from '../../../lib/supabase';
+import { useUnitLabels } from '../../../hooks/useUnitLabels';
 import { api, rpc, newKey } from '../../../lib/api';
 import { blobToDataUrl } from '../../../lib/files';
 import { setCaptureBusy } from '../../../lib/capture';
@@ -37,9 +40,20 @@ interface BatchResult { key: string; ok: boolean; text: string }
  */
 export function ReceiveForm({ units, storage, onDone, preregistered }: {
   units: UnitRow[]; storage: StorageLoc[]; onDone: () => void;
-  preregistered?: { id: string; tracking_code: string | null; carrier: string; unit_id: string | null } | null;
+  preregistered?: { id: string; tracking_code: string | null; carrier: string; unit_id: string | null; courier_name?: string | null } | null;
 }) {
   const t = useTenant();
+  const labels = useUnitLabels();
+  const { session } = useSession();
+  const [courier, setCourier] = useState(preregistered?.courier_name || '');
+  const [receiver, setReceiver] = useState('');
+  const receiverEdited = useRef(false);
+  useEffect(() => {
+    let active = true;
+    if (session?.user.id) void supabase.from('profiles').select('full_name').eq('id', session.user.id).maybeSingle()
+      .then(({ data }) => { if (active && !receiverEdited.current) setReceiver(data?.full_name || ''); });
+    return () => { active = false; };
+  }, [session?.user.id]);
   const [photos, setPhotos] = useState<GalleryPhoto[]>([]);
   const [avail, setAvail] = useState<StorageLoc[] | null>(null);
   const [stored, setStored] = useState(false);
@@ -107,7 +121,7 @@ export function ReceiveForm({ units, storage, onDone, preregistered }: {
       // Unidade só vem pré-selecionada quando o servidor encontrou morador ativo; demais casos exigem escolha humana.
       const hit = r.match?.unit_id ? units.find((u) => u.id === r.match!.unit_id) : null;
       if (hit && (r.match!.status === 'matched' || r.match!.status === 'name_only')) {
-        setUnitId(hit.id); setUnitQuery(unitName(hit.block, hit.label));
+        setUnitId(hit.id); setUnitQuery(unitName(hit.block, hit.label, labels));
       } else {
         setUnitId(null); setUnitQuery([r.block, r.unit].filter(Boolean).join(' '));
       }
@@ -123,19 +137,22 @@ export function ReceiveForm({ units, storage, onDone, preregistered }: {
     e.preventDefault();
     if (submitting.current) return;
     if (!unitId) return setError('Selecione a unidade de destino.');
+    if (courier.trim().length < 2) return setError('Informe o nome do entregador.');
+    if (receiver.trim().length < 2) return setError('Informe o nome do porteiro que está recebendo.');
     if (batch && !preregistered && recipient.trim().length < 2) return setError('No registro rápido, informe o destinatário de cada encomenda.');
     if (!preregistered && locs.length > 0 && (!loc || !stored)) return setError('Escolha o local e confirme que a encomenda foi guardada nele.');
     submitting.current = true;
     setBusy(true);
     setError(null);
     const itemKey = key.current;
-    const where = unitName(unit?.block, unit?.label);
+    const where = unitName(unit?.block, unit?.label, labels);
     try {
       const pkg = savedPackage.current || (preregistered
-        ? await rpc('confirm_preregistered', { p_tenant: t.tenant.id, p_package: preregistered.id, p_unit: unitId, p_tracking: tracking || null, p_carrier: carrier, p_storage_location: loc || null })
+        ? await rpc('confirm_preregistered', { p_tenant: t.tenant.id, p_package: preregistered.id, p_unit: unitId, p_tracking: tracking || null, p_carrier: carrier, p_storage_location: loc || null, p_courier: courier.trim(), p_received_by_name: receiver.trim() })
         : await rpc('receive_and_store', {
           p_tenant: t.tenant.id, p_idempotency_key: key.current, p_unit: unitId, p_tracking: tracking || null, p_carrier: carrier,
           p_recipient: recipient || null, p_notes: notes || null, p_storage_location: loc || null, p_label_sha256: photoSha,
+          p_courier: courier.trim(), p_received_by_name: receiver.trim(),
         }));
       savedPackage.current = pkg;
       setSaved(true);
@@ -152,7 +169,7 @@ export function ReceiveForm({ units, storage, onDone, preregistered }: {
       savedPackage.current = null;
       photos.forEach((p) => URL.revokeObjectURL(p.url));
       setPhotos([]); setSaved(false); setOcr(null); setOcrMsg(null); setStored(false);
-      setTracking(''); setRecipient(''); setNotes('');
+      setTracking(''); setRecipient(''); setNotes(''); setCourier('');
       if (!preregistered) refreshAvail();
       // Registro rápido mantém unidade, transportadora e local; a guarda é confirmada de novo a cada item.
       if (!batch) {
@@ -210,7 +227,7 @@ export function ReceiveForm({ units, storage, onDone, preregistered }: {
           )}
         </div>
         {batch && <p className="text-xs text-muted">Unidade, transportadora e local ficam para o próximo item. Destinatário e confirmação da guarda são exigidos em cada encomenda.</p>}
-        <div data-tour="receber-unidade"><Field label="Unidade de destino" hint={unit ? `Selecionada: ${unitName(unit.block, unit.label)}` : 'Digite bloco e unidade, ex.: "A 101" ou "casa 12".'}>
+        <div data-tour="receber-unidade"><Field label="Unidade de destino" hint={unit ? `Selecionada: ${unitName(unit.block, unit.label, labels)}` : `Digite ${labels.group.toLowerCase()} e ${labels.number.toLowerCase()}, ex.: "A 101", "Quadra B Lote 15" ou "Rua 3 Casa 12".`}>
           <Input value={unitQuery} onChange={(e) => { setUnitQuery(e.target.value); setUnitId(null); }} placeholder="Buscar unidade" autoComplete="off" />
         </Field></div>
         {!unitId && unitQuery && (
@@ -218,8 +235,8 @@ export function ReceiveForm({ units, storage, onDone, preregistered }: {
             {candidates.length === 0 && <p className="text-sm text-muted">Nenhuma unidade encontrada.</p>}
             {candidates.map((u) => (
               <button type="button" role="option" aria-selected={false} key={u.id}
-                onClick={() => { setUnitId(u.id); setUnitQuery(unitName(u.block, u.label)); trackingRef.current?.focus(); }}
-                className="min-h-10 px-3 rounded-lg border border-line bg-surface hover:bg-surface-2 text-sm">{unitName(u.block, u.label)}</button>
+                onClick={() => { setUnitId(u.id); setUnitQuery(unitName(u.block, u.label, labels)); trackingRef.current?.focus(); }}
+                className="min-h-10 px-3 rounded-lg border border-line bg-surface hover:bg-surface-2 text-sm">{unitName(u.block, u.label, labels)}</button>
             ))}
           </div>
         )}
@@ -228,6 +245,14 @@ export function ReceiveForm({ units, storage, onDone, preregistered }: {
           <Field label="Rastreio" hint="Leitor USB funciona aqui (digita e dá Enter).">
             <Input ref={trackingRef} value={tracking} onChange={(e) => setTracking(e.target.value)} maxLength={80} autoComplete="off"
               onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} />
+          </Field>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <Field label="Nome do entregador (obrigatório)" hint="Ex.: João - Mercado Livre">
+            <Input value={courier} onChange={(e) => setCourier(e.target.value)} required minLength={2} maxLength={80} autoComplete="off" />
+          </Field>
+          <Field label="Recebido por (porteiro, obrigatório)" hint="Preenchido com quem está logado. Altere se o terminal for compartilhado.">
+            <Input value={receiver} onChange={(e) => { receiverEdited.current = true; setReceiver(e.target.value); }} required minLength={2} maxLength={120} autoComplete="name" />
           </Field>
         </div>
         {!preregistered && (

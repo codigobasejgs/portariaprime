@@ -24,6 +24,8 @@ export interface ReceiptData {
     tracking_code?: string | null; carrier?: string; unit_block?: string | null; unit_label?: string;
     received_at?: string; picked_up_at?: string; picked_up_by?: string; operator?: string;
     method?: string; manual_reason?: string | null; recipient_kind?: string | null; storage?: string | null;
+    /** Comprovantes a partir de 06/11/2026: quem recebeu na portaria, entregador e unidade com os rótulos do condomínio. */
+    received_by_name?: string | null; courier_name?: string | null; unit_text?: string | null;
   };
 }
 export interface ReceiptAssets { logo?: Uint8Array | null; signature?: Uint8Array | null; photo?: Uint8Array | null }
@@ -149,7 +151,9 @@ export async function renderReceiptPdf(data: ReceiptData, assets: ReceiptAssets)
 
   // Tabela de dados
   const s = data.snapshot;
-  const unit = [s.unit_block ? `Bloco ${s.unit_block}` : null, s.unit_label].filter(Boolean).join(' · ') || '—';
+  const unit = s.unit_text || [s.unit_block ? `Bloco ${s.unit_block}` : null, s.unit_label].filter(Boolean).join(' · ') || '—';
+  const reception = s.received_by_name || s.courier_name
+    ? [['Recebido na portaria por', `${s.received_by_name || '—'}${s.courier_name ? ` (Entregador: ${s.courier_name})` : ''}`] as [string, string]] : [];
   const rows: [string, string][] = [
     ['Encomenda', data.package_id.slice(0, 8).toUpperCase()],
     ['Destinatário na etiqueta', data.recipient_name || '—'],
@@ -157,8 +161,9 @@ export async function renderReceiptPdf(data: ReceiptData, assets: ReceiptAssets)
     ['Transportadora', s.carrier || '—'],
     ['Rastreio', s.tracking_code || '—'],
     ['Recebida na portaria', fmt(s.received_at, tz)],
+    ...reception,
     ['Entregue em', fmt(s.picked_up_at, tz)],
-    ['Responsável pela entrega', s.operator || 'Portaria'],
+    ['Entregue ao morador por', s.operator || 'Portaria'],
     ['Retirado por', s.picked_up_by || '—'],
     ['Condição', s.recipient_kind === 'autorizado' ? 'Terceiro autorizado' : 'Morador da unidade'],
     ['Local de guarda', s.storage || data.storage || '—'],

@@ -1,6 +1,6 @@
 // Dashboard executivo do síndico: períodos no fuso do condomínio, insights determinísticos
 // (cada um com o número que o fundamenta) e tabelas para exportação. Sem React; testável.
-import { STATUS_LABEL, toCsv } from './format';
+import { DEFAULT_UNIT_LABELS, STATUS_LABEL, toCsv, unitName, type UnitLabels } from './format';
 import { xlsx, type Cell } from './xlsx';
 
 export const MAX_DAYS = 366; // diferença máxima aceita pela RPC (p_to - p_from)
@@ -72,12 +72,12 @@ export function bucketLabel(s: { start: string; end: string }, gran: string) {
   return br(s.start).slice(0, 5);
 }
 export const periodLabel = (from: string, to: string) => from === to ? br(from) : `${br(from)} a ${br(to)}`;
-export const unitLabel = (block?: string | null, unit?: string | null) => [block ? `Bloco ${block}` : null, unit].filter(Boolean).join(' · ') || '—';
+export const unitLabel = unitName;
 
 export interface Insight { id: string; text: string; basis: string; tone?: 'warning' }
 
 /** Insights calculados dos agregados. Só constatações do período; nenhuma previsão. */
-export function insights(d: any): Insight[] {
+export function insights(d: any, labels: UnitLabels = DEFAULT_UNIT_LABELS): Insight[] {
   const out: Insight[] = [];
   const r = d.received;
   if (r.change != null && r.change !== 0) {
@@ -87,7 +87,7 @@ export function insights(d: any): Insight[] {
   const blocks = (d.blocks || []).filter((b: any) => b.received > 0);
   if (blocks.length >= 2 && r.value > 0) {
     const b = blocks[0];
-    out.push({ id: 'block', text: `O bloco ${b.block} concentra ${pct(b.received / r.value)} das recebidas no período.`, basis: `${num(b.received)} de ${num(r.value)}` });
+    out.push({ id: 'block', text: `${unitName(b.block, null, labels)} concentra ${pct(b.received / r.value)} das recebidas no período.`, basis: `${num(b.received)} de ${num(r.value)}` });
   }
   const e = d.efficiency;
   if (e.within_48h != null) {
@@ -112,19 +112,19 @@ export function insights(d: any): Insight[] {
   return out;
 }
 
-const filterText = (f: Filters, d: any) => {
+const filterText = (f: Filters, d: any, labels: UnitLabels) => {
   const unit = f.unit && (d.options?.units || []).find((u: any) => u.id === f.unit);
-  return [f.block && `Bloco ${f.block}`, unit && `Unidade ${unitLabel(unit.block, unit.label)}`,
+  return [f.block && unitName(f.block, null, labels), unit && `Unidade ${unitName(unit.block, unit.label, labels)}`,
     f.status && (f.status === 'PENDENTES' ? 'Pendentes' : STATUS_LABEL[f.status] || f.status), f.carrier].filter(Boolean).join(' · ') || 'Nenhum';
 };
 
 /** Tabelas exportadas (mesmo conteúdo da tela): indicadores, ranking e série. */
-export function exportTables(d: any, ranking: any[], tenantName: string): { name: string; rows: Cell[][] }[] {
+export function exportTables(d: any, ranking: any[], tenantName: string, labels: UnitLabels = DEFAULT_UNIT_LABELS): { name: string; rows: Cell[][] }[] {
   const ch = (x: { change: number | null }) => x.change == null ? '' : pct(x.change, 1);
   const kpis: Cell[][] = [
     ['Condomínio', tenantName, '', ''],
     ['Período', periodLabel(d.from, d.to), 'Anterior', periodLabel(d.previous.from, d.previous.to)],
-    ['Filtros', filterText(d.filters || {}, d), '', ''],
+    ['Filtros', filterText(d.filters || {}, d, labels), '', ''],
     ['Indicador', 'Valor', 'Período anterior', 'Variação'],
     ['Recebidas', d.received.value, d.received.previous, ch(d.received)],
     ['Entregues', d.delivered.value, d.delivered.previous, ch(d.delivered)],
@@ -139,7 +139,7 @@ export function exportTables(d: any, ranking: any[], tenantName: string): { name
     ['Recebimento → aviso, mediana (h)', d.efficiency.receipt_to_notice.median_h, '', ''],
     ['Aviso → retirada, mediana (h)', d.efficiency.notice_to_pickup.median_h, '', ''],
   ];
-  const rank: Cell[][] = [['Posição', 'Bloco', 'Unidade', 'Recebidas', 'Entregues', 'Pendentes', '% do total', 'Variação', 'Tempo médio (h)'],
+  const rank: Cell[][] = [['Posição', labels.group, labels.number, 'Recebidas', 'Entregues', 'Pendentes', '% do total', 'Variação', 'Tempo médio (h)'],
     ...ranking.map((u, i) => [i + 1, u.block || '', u.unit, u.received, u.delivered, u.pending, pct(u.share, 1), u.change == null ? '' : pct(u.change, 1), u.avg_pickup_h])];
   const series: Cell[][] = [['Início', 'Fim', 'Recebidas', 'Entregues', 'Saldo pendente no fim'],
     ...d.series.map((s: any) => [br(s.start), br(s.end), s.received, s.delivered, s.balance])];

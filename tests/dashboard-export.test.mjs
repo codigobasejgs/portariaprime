@@ -5,6 +5,7 @@ import { crc32 as crc32as } from 'node:zlib';
 import { crc32, xlsx } from '../src/lib/xlsx.ts';
 import { presetRange, rangeError, todayIn, insights, exportTables, exportCsv, exportName } from '../src/lib/dashboard.ts';
 import { dashboardPdf, winAnsi } from '../src/lib/dashboard-pdf.ts';
+import { unitName } from '../src/lib/format.ts';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 
 // Leitor de zip independente do gerador (pelo diretório central); exige método 0 (stored).
@@ -80,10 +81,23 @@ const sample = {
   series: [{ start: '2026-03-09', end: '2026-03-09', received: 6, delivered: 2, balance: 9 }, { start: '2026-03-10', end: '2026-03-10', received: 4, delivered: 2, balance: 7 }],
 };
 
+test('unitName: nomenclatura do condomínio por chamada, padrão inalterado', () => {
+  assert.equal(unitName('A', '101'), 'Bloco A · 101');
+  assert.equal(unitName('Bloco A', '101'), 'Bloco A · 101', 'não duplica prefixo');
+  assert.equal(unitName(null, null), '—');
+  const lotes = { group: 'Quadra', number: 'Lote' };
+  assert.equal(unitName('B', '15', lotes), 'Quadra B · Lote 15');
+  assert.equal(unitName('quadra B', 'Lote 15', lotes), 'quadra B · Lote 15');
+  assert.equal(unitName(null, '12', { group: 'Rua', number: 'Casa' }), 'Casa 12');
+  assert.equal(unitName('Palmeiras', '12', { group: ' ', number: '' }), 'Bloco Palmeiras · 12', 'rótulo vazio cai no padrão');
+  assert.equal(unitName('Lote', '7', lotes), 'Quadra Lote · Lote 7', 'prefixo só conta com separador');
+});
+
 test('insights determinísticos com o número que os fundamenta', () => {
   const by = Object.fromEntries(insights(sample).map((i) => [i.id, i]));
   assert.match(by.growth.text, /cresceram 25%/); assert.equal(by.growth.basis, '8 → 10 encomendas');
-  assert.match(by.block.text, /bloco B concentra 70%/); assert.equal(by.block.basis, '7 de 10');
+  assert.match(by.block.text, /Bloco B concentra 70%/); assert.equal(by.block.basis, '7 de 10');
+  assert.match(insights(sample, { group: 'Quadra', number: 'Lote' }).find((i) => i.id === 'block').text, /^Quadra B concentra/);
   assert.equal(by.late.tone, 'warning'); assert.equal(by.late.basis, '0% → 50% das entregas');
   assert.match(by.peak.text, /terça-feira; horário de pico entre 14h e 15h/); assert.match(by.peak.basis, /^7 recebidas no dia · 5 no horário$/);
   assert.match(by.units.text, /5 unidades concentram 90%/);
@@ -103,6 +117,9 @@ test('CSV: BOM UTF-8, separador ;, seções da tela e fórmulas neutralizadas', 
   assert.match(csv, /"Filtros";"Bloco B"/);
   assert.match(csv, /"1";"B";"'=201";"7"/);
   assert.match(csv, /"Série"\r\n"Início";"Fim";"Recebidas";"Entregues";"Saldo pendente no fim"\r\n"09\/03\/2026";"09\/03\/2026";"6";"2";"9"/);
+  const lotes = exportCsv(exportTables(sample, [], 'Cond', { group: 'Quadra', number: 'Lote' }));
+  assert.match(lotes, /"Filtros";"Quadra B"/);
+  assert.match(lotes, /"Posição";"Quadra";"Lote"/);
   assert.equal(exportName('ipe-cond', '2026-03-09', '2026-03-10', 'csv'), 'painel-ipe-cond-2026-03-09-a-2026-03-10.csv');
 });
 

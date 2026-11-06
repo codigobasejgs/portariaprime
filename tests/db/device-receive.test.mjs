@@ -90,7 +90,7 @@ test('chave de outro dispositivo ou funcionário nunca devolve registro alheio',
   await receive(key);
   await assert.rejects(receive(key, null, unit, otherHash), /Identificador/);
   const staffKey = uuid();
-  await db.rpc(admin, 'receive_package', { p_tenant: tenant, p_idempotency_key: staffKey, p_unit: unit, p_tracking: null, p_carrier: 'Correios' });
+  await db.rpc(admin, 'receive_package', { p_tenant: tenant, p_idempotency_key: staffKey, p_unit: unit, p_tracking: null, p_carrier: 'Correios', p_courier: 'Entregador Teste' });
   await assert.rejects(receive(staffKey), /Identificador/);
   // Sem portaria explícita, o dispositivo utiliza a portaria padrão do próprio condomínio.
   assert.equal((await receive(uuid(), null, unit, otherHash)).storage_code, 'A1');

@@ -51,7 +51,8 @@ export const POST = handler(async (request) => {
   if (action === 'context') {
     const { data, error } = await svc.rpc('device_context', { p_secret_hash: await secretHash(request) });
     if (error) rpcError(error);
-    return json({ deviceName: data.device_name, units: data.units });
+    return json({ deviceName: data.device_name, units: data.units,
+      labels: { group: data.group_label || 'Bloco', number: data.number_label || 'Apartamento' } });
   }
 
   if (action === 'ocr') {

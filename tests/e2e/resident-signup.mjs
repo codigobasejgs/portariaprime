@@ -56,8 +56,8 @@ async function fill(p, { name, email, phone, block, unit, password = PASS }) {
   await p.getByLabel('Nome completo').fill(name);
   if (email) await p.getByLabel('E-mail').fill(email);
   await p.getByLabel('Celular / WhatsApp').fill(phone);
-  if (block) await p.getByLabel('Bloco / Torre').selectOption(block);
-  await p.getByLabel('Apartamento / Unidade').selectOption(unit);
+  if (block) await p.getByLabel('Bloco', { exact: true }).selectOption(block);
+  await p.getByLabel('Apartamento', { exact: true }).selectOption(unit);
   if (email) { await p.getByLabel('Senha', { exact: true }).fill(password); await p.getByLabel('Confirme a senha').fill(password); }
 }
 const browser = await chromium.launch();
@@ -81,12 +81,12 @@ try {
   await m.goto(`${APP}/c/${slug}`);
   await m.getByRole('button', { name: 'Criar minha conta' }).click();
   await m.getByRole('heading', { name: 'Criar minha conta' }).waitFor();
-  for (const l of ['Nome completo', 'E-mail', 'Celular / WhatsApp', 'Bloco / Torre', 'Apartamento / Unidade', 'Confirme a senha']) await m.getByLabel(l).waitFor();
+  for (const l of ['Nome completo', 'E-mail', 'Celular / WhatsApp', 'Bloco', 'Apartamento', 'Confirme a senha']) await m.getByLabel(l).waitFor();
   assert.equal(await m.getByRole('checkbox').isChecked(), false, 'aceite inicia desmarcado');
-  assert.deepEqual(await m.getByLabel('Bloco / Torre').locator('option').allInnerTexts(), ['Selecione', 'A', 'B'], 'blocos reais');
-  assert.ok(await m.getByLabel('Apartamento / Unidade').isDisabled(), 'unidade depois do bloco');
-  await m.getByLabel('Bloco / Torre').selectOption('B');
-  assert.deepEqual(await m.getByLabel('Apartamento / Unidade').locator('option').allInnerTexts(), ['Selecione', '201', 'Minha unidade não está na lista'], 'só unidades do bloco B');
+  assert.deepEqual(await m.getByLabel('Bloco', { exact: true }).locator('option').allInnerTexts(), ['Selecione', 'A', 'B'], 'blocos reais');
+  assert.ok(await m.getByLabel('Apartamento', { exact: true }).isDisabled(), 'unidade depois do bloco');
+  await m.getByLabel('Bloco', { exact: true }).selectOption('B');
+  assert.deepEqual(await m.getByLabel('Apartamento', { exact: true }).locator('option').allInnerTexts(), ['Selecione', '201', 'Minha unidade não está na lista'], 'só unidades do bloco B');
   assert.equal(await m.getByText('Já tenho conta — Entrar').count(), 1);
   assert.ok(await m.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'sem rolagem horizontal');
 
@@ -193,7 +193,7 @@ try {
   await r.getByRole('heading', { name: 'Revise seu cadastro' }).waitFor();
   assert.equal(await r.getByLabel('Nome completo').inputValue(), 'Duda Ramos');
   assert.equal(await r.getByLabel('Celular / WhatsApp').inputValue(), '(31) 99123-4567');
-  assert.equal(await r.getByLabel('Apartamento / Unidade').inputValue(), '101');
+  assert.equal(await r.getByLabel('Apartamento', { exact: true }).inputValue(), '101');
   assert.equal(await r.getByRole('checkbox').isChecked(), false);
   assert.equal(await r.getByLabel('E-mail').count(), 0, 'sem e-mail/senha para quem já tem conta');
   await r.getByRole('checkbox').check();
@@ -219,7 +219,7 @@ try {
   step('isolamento: conta do condomínio A no portal B vê só as unidades e o termo de B');
   await r.goto(`${APP}/c/${slugB}/solicitar`);
   await r.getByRole('heading', { name: 'Cadastro de morador' }).waitFor();
-  assert.deepEqual(await r.getByLabel('Apartamento / Unidade').locator('option').allInnerTexts(), ['Selecione', '9', 'Minha unidade não está na lista']);
+  assert.deepEqual(await r.getByLabel('Apartamento', { exact: true }).locator('option').allInnerTexts(), ['Selecione', '9', 'Minha unidade não está na lista']);
   await r.getByRole('button', { name: 'Ler o termo completo' }).click();
   await r.getByText(/morador efetivo do Condomínio Vizinho/).waitFor();
   assert.equal(await r.getByText('Residencial Jardim').count(), 0);

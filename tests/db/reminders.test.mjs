@@ -24,7 +24,7 @@ test('lembretes: regra por condomínio, destinatários, dedupe e encerramento', 
     }
     // Contato compartilhado (mesmo telefone em dois cadastros) recebe uma vez só.
     await db.sql("update resident_contacts set phone='+5511999990000' where tenant_id=$1 and unit_id=$2", [T, unit]);
-    const receive = (key) => db.rpc(port, 'receive_package', { p_tenant: T, p_idempotency_key: key, p_unit: unit, p_tracking: null, p_carrier: 'Correios' });
+    const receive = (key) => db.rpc(port, 'receive_package', { p_tenant: T, p_idempotency_key: key, p_unit: unit, p_tracking: null, p_carrier: 'Correios', p_courier: 'Entregador Teste' });
     const pkg = await receive('rem-key-0001');
     const pkg2 = await receive('rem-key-0002');
     const tick = () => db.service('select public.enqueue_package_reminders(200) as r').then((r) => r[0].r);

@@ -108,11 +108,11 @@ if (process.env.PP_E2E_ALLOW !== '1' || !url || !anon || !secret) {
 
   test('recebimento, foto no bucket privado, QR, retirada com assinatura e comprovante', async () => {
     pkg = await rpc('porteiroA', 'receive_package', {
-      p_tenant: tenants.A, p_idempotency_key: `${run}-k1`, p_unit: unitA, p_tracking: `${run}BR1`, p_carrier: 'Correios',
+      p_tenant: tenants.A, p_idempotency_key: `${run}-k1`, p_unit: unitA, p_tracking: `${run}BR1`, p_carrier: 'Correios', p_courier: 'Entregador Teste',
       p_recipient: 'Destinatário E2E', p_notes: null, p_concierge: null, p_storage_location: null,
     });
     const again = await rpc('porteiroA', 'receive_package', {
-      p_tenant: tenants.A, p_idempotency_key: `${run}-k1`, p_unit: unitA, p_tracking: `${run}BR1`, p_carrier: 'Correios',
+      p_tenant: tenants.A, p_idempotency_key: `${run}-k1`, p_unit: unitA, p_tracking: `${run}BR1`, p_carrier: 'Correios', p_courier: 'Entregador Teste',
       p_recipient: null, p_notes: null, p_concierge: null, p_storage_location: null,
     });
     assert.equal(again.id, pkg.id, 'retry não duplica');
@@ -183,7 +183,7 @@ if (process.env.PP_E2E_ALLOW !== '1' || !url || !anon || !secret) {
     const { data } = await users.porteiroA.client.from('packages').select('id').eq('tenant_id', tenants.A);
     assert.equal(data.length, 0);
     await assert.rejects(rpc('porteiroA', 'receive_package', {
-      p_tenant: tenants.A, p_idempotency_key: `${run}-k2`, p_unit: unitA, p_tracking: null, p_carrier: 'Outra',
+      p_tenant: tenants.A, p_idempotency_key: `${run}-k2`, p_unit: unitA, p_tracking: null, p_carrier: 'Outra', p_courier: 'Entregador Teste',
       p_recipient: null, p_notes: null, p_concierge: null, p_storage_location: null,
     }), /Sem permissão/);
   });

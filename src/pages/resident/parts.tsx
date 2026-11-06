@@ -11,6 +11,7 @@ export interface ResidentPackage {
   id: string; ref: string; status: string; carrier: string; tracking_code: string | null; recipient_name: string | null;
   unit_id: string; unit_block: string | null; unit_label: string;
   received_at: string; stored_at: string | null; picked_up_at: string | null; picked_up_by_name: string | null; resolved_at: string | null;
+  courier_name?: string | null; received_by_name?: string | null;
   concierge_name: string | null; receipt: { protocol: string; pdf_status: 'pending' | 'processing' | 'ready' | 'failed' } | null;
   timeline?: { kind: string; at: string }[];
 }
@@ -51,7 +52,7 @@ export function WaitingCard({ p, multiUnit, onQr }: { p: ResidentPackage; multiU
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
         <dt className="text-muted">Chegou em</dt><dd>{dateTime(p.received_at, t.tenant.timezone)}</dd>
         {p.recipient_name && <><dt className="text-muted">Para</dt><dd className="break-words">{p.recipient_name}</dd></>}
-        {multiUnit && <><dt className="text-muted">Unidade</dt><dd>{unitName(p.unit_block, p.unit_label)}</dd></>}
+        {multiUnit && <><dt className="text-muted">Unidade</dt><dd>{unitName(p.unit_block, p.unit_label, t.unitLabels)}</dd></>}
         {p.concierge_name && <><dt className="text-muted">Retirar em</dt><dd>{p.concierge_name}</dd></>}
       </dl>
       <div className="flex flex-col sm:flex-row gap-2">
@@ -130,7 +131,7 @@ export function QrSheet({ p, onClose }: { p: ResidentPackage; onClose: () => voi
       <div className="space-y-4 text-center">
         <div>
           <p className="font-semibold">{name}</p>
-          <p className="text-sm text-muted">{unitName(p.unit_block, p.unit_label)} · {pkgTitle(p)}</p>
+          <p className="text-sm text-muted">{unitName(p.unit_block, p.unit_label, t.unitLabels)} · {pkgTitle(p)}</p>
         </div>
         {state === 'ok' && qr ? (
           <>

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Download, FileSpreadsheet, FileText, X } from 'lucide-react';
 import { rpc } from '../../lib/api';
 import { useTenant } from '../../lib/tenant';
+import { useUnitLabels } from '../../hooks/useUnitLabels';
 import { onLink, query } from '../../lib/router';
 import { dateTime, download, STATUS_LABEL, toCsv, unitName } from '../../lib/format';
 import { RELATIONS, relationLabel } from '../../lib/resident-signup';
@@ -51,6 +52,7 @@ export function RelatoriosPage() {
 
 function PackagesReport({ opt }: { opt: Opt }) {
   const t = useTenant();
+  const labels = useUnitLabels();
   const tz = t.tenant.timezone;
   const oldOnly = query('antigas') === '1';
   const [f, setF] = useState<PkgFilters>(() => ({
@@ -106,12 +108,12 @@ function PackagesReport({ opt }: { opt: Opt }) {
   const COLS: [string, string][] = [['unit', 'Unidade'], ['carrier', 'Transportadora'], ['tracking_code', 'Rastreio'], ['protocol', 'Protocolo'], ['recipient_name', 'Destinatário'],
     ['status_label', 'Situação'], ['received', 'Recebida em'], ['received_by_name', 'Recebida por'], ['picked', 'Retirada em'], ['picked_up_by_name', 'Retirada por'],
     ['delivered_by_name', 'Entregue por'], ['hours_waiting', 'Horas até a retirada'], ['via', 'Registro'], ['resolution_reason', 'Motivo da exceção']];
-  const shape = (p: any) => ({ ...p, unit: unitName(p.unit_block, p.unit_label), status_label: STATUS_LABEL[p.status] || p.status, received: dateTime(p.received_at, tz),
+  const shape = (p: any) => ({ ...p, unit: unitName(p.unit_block, p.unit_label, labels), status_label: STATUS_LABEL[p.status] || p.status, received: dateTime(p.received_at, tz),
     picked: dateTime(p.picked_up_at, tz), via: VIA[p.registered_via] || p.registered_via });
   const base = `encomendas-${t.tenant.slug}-${f.received_from || 'inicio'}-a-${f.received_to || 'hoje'}`;
   const describe = () => [
     f.received_from || f.received_to ? `Recebidas de ${f.received_from || 'início'} a ${f.received_to || 'hoje'}` : 'Todo o período',
-    f.block && `Bloco ${f.block}`, f.unit && (() => { const u = opt.units.find((x) => x.id === f.unit); return u ? unitName(u.block, u.label) : null; })(),
+    f.block && unitName(f.block, null, labels), f.unit && (() => { const u = opt.units.find((x) => x.id === f.unit); return u ? unitName(u.block, u.label, labels) : null; })(),
     f.status && (f.status === 'PENDENTES' ? 'Pendentes' : STATUS_LABEL[f.status]), f.carrier && f.carrier,
     f.operator && `Equipe: ${opt.operators.find((o) => o.id === f.operator)?.name}`, f.picked_from || f.picked_to ? `Retiradas de ${f.picked_from || 'início'} a ${f.picked_to || 'hoje'}` : null,
     f.recipient && `Destinatário: ${f.recipient}`, f.search && `Busca: ${f.search}`,
@@ -175,10 +177,10 @@ function PackagesReport({ opt }: { opt: Opt }) {
             {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select></Field>
           <Field label="Transportadora / origem"><Select value={f.carrier || ''} onChange={set('carrier')}>
             <option value="">Todas</option>{opt.carriers.map((c) => <option key={c}>{c}</option>)}</Select></Field>
-          {opt.blocks.length > 0 && <Field label="Bloco"><Select value={f.block || ''} onChange={set('block')}>
+          {opt.blocks.length > 0 && <Field label={labels.group}><Select value={f.block || ''} onChange={set('block')}>
             <option value="">Todos</option>{opt.blocks.map((b) => <option key={b} value={b}>{b}</option>)}</Select></Field>}
           <Field label="Unidade"><Select value={f.unit || ''} onChange={set('unit')}>
-            <option value="">Todas</option>{units.map((u) => <option key={u.id} value={u.id}>{unitName(u.block, u.label)}</option>)}</Select></Field>
+            <option value="">Todas</option>{units.map((u) => <option key={u.id} value={u.id}>{unitName(u.block, u.label, labels)}</option>)}</Select></Field>
           <Field label="Rastreio ou protocolo"><Input value={f.search || ''} maxLength={80} onChange={set('search')} placeholder="BR123…, PP-…" /></Field>
           <Field label="Destinatário"><Input value={f.recipient || ''} maxLength={80} onChange={set('recipient')} /></Field>
         </div>
@@ -219,7 +221,7 @@ function PackagesReport({ opt }: { opt: Opt }) {
               <tbody className="divide-y divide-line">
                 {rows.map((p) => (
                   <tr key={p.id} className="align-top">
-                    <td className="py-2 pr-3 pl-4 sm:pl-0 whitespace-nowrap">{unitName(p.unit_block, p.unit_label)}</td>
+                    <td className="py-2 pr-3 pl-4 sm:pl-0 whitespace-nowrap">{unitName(p.unit_block, p.unit_label, labels)}</td>
                     <td className="pr-3">{p.carrier}</td>
                     <td className="pr-3 text-xs"><span className="font-mono">{p.tracking_code || '—'}</span>{p.protocol && <span className="block text-muted">{p.protocol}</span>}</td>
                     <td className="pr-3 whitespace-nowrap">{dateTime(p.received_at, tz)}</td>
@@ -258,6 +260,7 @@ function Bars({ title, items }: { title: string; items: [string, number][] }) {
 
 function ResidentsReport({ opt }: { opt: Opt }) {
   const t = useTenant();
+  const labels = useUnitLabels();
   const [f, setF] = useState<Partial<Record<'block' | 'unit' | 'status' | 'occupancy' | 'search' | 'relation', string>>>({});
   const [rows, setRows] = useState<any[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -279,7 +282,7 @@ function ResidentsReport({ opt }: { opt: Opt }) {
       active: rows.filter((r) => r.status === 'active').length, pending: rows.filter((r) => r.status === 'pending').length };
   }, [rows]);
   const COLS: [string, string][] = [['unit', 'Unidade'], ['full_name', 'Morador'], ['relation_label', 'Perfil'], ['status_label', 'Situação'], ['email', 'E-mail'], ['phone', 'Celular'], ['since_fmt', 'Desde']];
-  const shape = (r: any) => ({ ...r, unit: unitName(r.block, r.label), status_label: r.status ? RES_STATUS[r.status][0] : 'Sem morador', relation_label: relationLabel(r.relation) || '', since_fmt: r.since ? dateTime(r.since, t.tenant.timezone) : '' });
+  const shape = (r: any) => ({ ...r, unit: unitName(r.block, r.label, labels), status_label: r.status ? RES_STATUS[r.status][0] : 'Sem morador', relation_label: relationLabel(r.relation) || '', since_fmt: r.since ? dateTime(r.since, t.tenant.timezone) : '' });
   const exp = async (type: 'csv' | 'xlsx' | 'pdf') => {
     setBusy(type);
     try {
@@ -301,8 +304,8 @@ function ResidentsReport({ opt }: { opt: Opt }) {
     <div className="space-y-4">
       <Card className="space-y-3">
         <div className="grid sm:grid-cols-2 lg:grid-cols-6 gap-3">
-          {opt.blocks.length > 0 && <Field label="Bloco"><Select value={f.block || ''} onChange={set('block')}><option value="">Todos</option>{opt.blocks.map((b) => <option key={b}>{b}</option>)}</Select></Field>}
-          <Field label="Unidade"><Select value={f.unit || ''} onChange={set('unit')}><option value="">Todas</option>{units.map((u) => <option key={u.id} value={u.id}>{unitName(u.block, u.label)}</option>)}</Select></Field>
+          {opt.blocks.length > 0 && <Field label={labels.group}><Select value={f.block || ''} onChange={set('block')}><option value="">Todos</option>{opt.blocks.map((b) => <option key={b}>{b}</option>)}</Select></Field>}
+          <Field label="Unidade"><Select value={f.unit || ''} onChange={set('unit')}><option value="">Todas</option>{units.map((u) => <option key={u.id} value={u.id}>{unitName(u.block, u.label, labels)}</option>)}</Select></Field>
           <Field label="Situação do morador"><Select value={f.status || ''} onChange={set('status')}><option value="">Todas</option>{Object.entries(RES_STATUS).map(([k, [l]]) => <option key={k} value={k}>{l}</option>)}</Select></Field>
           <Field label="Perfil"><Select value={f.relation || ''} onChange={set('relation')}><option value="">Todos</option>{RELATIONS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Select></Field>
           <Field label="Ocupação"><Select value={f.occupancy || ''} onChange={set('occupancy')}><option value="">Todas as unidades</option><option value="with">Com morador ativo</option><option value="without">Sem morador cadastrado</option></Select></Field>
@@ -327,7 +330,7 @@ function ResidentsReport({ opt }: { opt: Opt }) {
               <tbody className="divide-y divide-line">
                 {rows.map((r, i) => (
                   <tr key={`${r.unit_id}-${r.user_id || i}`}>
-                    <td className="py-2 pr-3 pl-4 sm:pl-0 whitespace-nowrap">{unitName(r.block, r.label)}{!r.unit_active && <span className="text-xs text-muted"> (inativa)</span>}</td>
+                    <td className="py-2 pr-3 pl-4 sm:pl-0 whitespace-nowrap">{unitName(r.block, r.label, labels)}{!r.unit_active && <span className="text-xs text-muted"> (inativa)</span>}</td>
                     <td className="pr-3">{r.full_name || <span className="text-muted">—</span>}{relationLabel(r.relation) && <span className="block text-xs text-muted">{relationLabel(r.relation)}</span>}</td>
                     <td className="pr-3">{r.status ? <Badge tone={RES_STATUS[r.status][1]}>{RES_STATUS[r.status][0]}</Badge> : <span className="text-muted">Sem morador</span>}</td>
                     <td className="pr-3 text-xs break-all">{r.email}{r.phone && <span className="block text-muted">{r.phone}</span>}</td>

@@ -102,7 +102,7 @@ try {
   await page.screenshot({ path: `${evidence}/morador-inicio-vazio-390.png`, fullPage: true });
 
   step('chegam duas encomendas: contagem, ordem (mais antiga primeiro), rótulos explícitos, sem estante');
-  const recv = (key, tracking, carrier) => call(porteiro, 'receive_package', { p_tenant: T, p_idempotency_key: `${run}${key}`, p_unit: unit.id, p_tracking: tracking, p_carrier: carrier });
+  const recv = (key, tracking, carrier) => call(porteiro, 'receive_package', { p_tenant: T, p_idempotency_key: `${run}${key}`, p_unit: unit.id, p_tracking: tracking, p_carrier: carrier, p_courier: 'Entregador Teste' });
   const p1 = await recv('k0001', 'BR111', 'Correios');
   await new Promise((r) => setTimeout(r, 1100));
   const p2 = await recv('k0002', 'ML222', 'Mercado Livre');

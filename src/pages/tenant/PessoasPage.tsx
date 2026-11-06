@@ -8,7 +8,9 @@ import { navigate, onLink } from '../../lib/router';
 import { parseCsv, unitName } from '../../lib/format';
 import { blockNames } from '../../lib/units-generate';
 import { loadUnits, UnitRow } from '../../lib/packages';
+import { useUnitLabels } from '../../hooks/useUnitLabels';
 import { Alert, Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, toast, useAction } from '../../components/ui';
+import { AccessRequestEditModal, InvitationEditModal, ResidentDeleteModal, ResidentEditModal } from './ResidentManage';
 
 type Tab = 'unidades' | 'moradores' | 'solicitacoes';
 const PAGE = 50;
@@ -114,6 +116,7 @@ function UnitsTab({ units, isAdmin, canApprove, onAdd, onImport, onInvite, onCha
   units: UnitRow[]; isAdmin: boolean; canApprove: boolean; onAdd: () => void; onImport: () => void; onInvite: (id: string) => void; onChanged: () => void;
 }) {
   const t = useTenant();
+  const labels = useUnitLabels();
   const [q, setQ] = useState('');
   const [limit, setLimit] = useState(PAGE);
   const [generating, setGenerating] = useState(false);
@@ -123,9 +126,10 @@ function UnitsTab({ units, isAdmin, canApprove, onAdd, onImport, onInvite, onCha
   const blocks = [...new Set(units.map((u) => u.block).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }));
   const max = (t.overview as any)?.entitlements?.max_units;
   const needle = q.trim().toLowerCase();
-  const shown = units.filter((u) => (!blockFilter || u.block === blockFilter) && `${u.block || ''} ${u.label}`.toLowerCase().includes(needle));
+  const shown = units.filter((u) => (!blockFilter || u.block === blockFilter) && `${u.block || ''} ${u.label} ${unitName(u.block, u.label, labels)}`.toLowerCase().includes(needle));
+  const group = labels.group.toLocaleLowerCase('pt-BR');
   const toggle = (u: UnitRow) => {
-    const name = unitName(u.block, u.label);
+    const name = unitName(u.block, u.label, labels);
     const msg = u.active
       ? `Desativar ${name}? Ela deixa de aparecer no recebimento de encomendas e libera vaga no plano. Moradores e histórico são mantidos.`
       : `Reativar ${name}? Ela volta a aparecer no recebimento e conta no limite do plano.`;
@@ -142,26 +146,26 @@ function UnitsTab({ units, isAdmin, canApprove, onAdd, onImport, onInvite, onCha
         <p className="text-sm"><strong>{active}</strong> unidade(s) ativa(s){max ? <span className="text-muted"> de {max} no plano</span> : null}</p>
         {isAdmin && (
           <div className="flex flex-wrap gap-2">
-            <Button onClick={() => setGenerating(true)}><Plus className="w-4 h-4" /> Montar blocos e apartamentos</Button>
+            <Button onClick={() => setGenerating(true)}><Plus className="w-4 h-4" /> Montar unidades em lote</Button>
             <Button variant="secondary" onClick={onAdd} data-tour="unidades-form">Nova unidade</Button>
             <Button variant="secondary" onClick={onImport} data-tour="unidades-importar"><Upload className="w-4 h-4" /> Importar CSV</Button>
           </div>
         )}
       </div>
-      {blocks.length > 0 && <div className="flex flex-wrap gap-1" role="group" aria-label="Filtrar por bloco">
+      {blocks.length > 0 && <div className="flex flex-wrap gap-1" role="group" aria-label={`Filtrar por ${group}`}>
         {['', ...blocks].map((b) => <button key={b || 'todos'} aria-pressed={blockFilter === b} onClick={() => { setBlockFilter(b); setLimit(PAGE); }}
           className={`min-h-9 px-3 rounded-full text-sm border ${blockFilter === b ? 'bg-primary text-primary-fg border-primary' : 'border-line hover:bg-surface-2'}`}>
-          {b ? `Bloco ${b}` : 'Todos'} <span className="opacity-70">{units.filter((u) => !b || u.block === b).length}</span></button>)}
+          {b ? unitName(b, null, labels) : 'Todos'} <span className="opacity-70">{units.filter((u) => !b || u.block === b).length}</span></button>)}
       </div>}
-      <Input aria-label="Buscar unidade" placeholder="Buscar por bloco ou unidade" value={q} onChange={(e) => { setQ(e.target.value); setLimit(PAGE); }} />
+      <Input aria-label="Buscar unidade" placeholder={`Buscar por ${group} ou ${labels.number.toLocaleLowerCase('pt-BR')}`} value={q} onChange={(e) => { setQ(e.target.value); setLimit(PAGE); }} />
       {shown.length === 0
         ? <Empty title={units.length ? 'Nenhuma unidade encontrada' : 'Nenhuma unidade cadastrada'}>{units.length ? null : 'Use “Nova unidade” ou importe uma planilha.'}</Empty>
         : (
           <ul className="divide-y divide-line" data-tour="unidades-lista">
             {shown.slice(0, limit).map((u) => (
               <li key={u.id} className="py-1 flex items-center justify-between gap-2 text-sm">
-                <span className={u.active ? '' : 'text-muted line-through'}>{unitName(u.block, u.label)}</span>
-                {isAdmin && <RowMenu label={`Ações de ${unitName(u.block, u.label)}`} items={[
+                <span className={u.active ? '' : 'text-muted line-through'}>{unitName(u.block, u.label, labels)}</span>
+                {isAdmin && <RowMenu label={`Ações de ${unitName(u.block, u.label, labels)}`} items={[
                   ...(canApprove && u.active ? [{ label: 'Convidar morador (opcional)', onClick: () => onInvite(u.id) }] : []),
                   { label: u.active ? 'Desativar unidade' : 'Reativar unidade', danger: u.active, onClick: () => toggle(u) },
                 ]} />}
@@ -177,6 +181,8 @@ function UnitsTab({ units, isAdmin, canApprove, onAdd, onImport, onInvite, onCha
 
 function GenerateUnitsModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const t = useTenant();
+  const labels = useUnitLabels();
+  const g = labels.group.toLocaleLowerCase('pt-BR'), n = labels.number.toLocaleLowerCase('pt-BR');
   const [style, setStyle] = useState<'numero' | 'letra' | 'nome' | 'sem'>('letra');
   const [count, setCount] = useState(2);
   const [names, setNames] = useState('');
@@ -199,37 +205,37 @@ function GenerateUnitsModal({ onClose, onDone }: { onClose: () => void; onDone: 
     <Input type={k === 'prefix' ? 'text' : 'number'} inputMode={k === 'prefix' ? 'text' : 'numeric'} className={w} min={0} value={s[k]} maxLength={10}
       onChange={(e) => { setS({ ...s, [k]: e.target.value }); setPreview(null); }} /></Field>;
   return (
-    <Modal title="Montar blocos e apartamentos" onClose={onClose} wide>
+    <Modal title="Montar unidades em lote" onClose={onClose} wide>
       <div className="space-y-4">
         <fieldset className="space-y-2">
-          <legend className="font-medium text-sm">1. Como se chamam os blocos?</legend>
-          <div className="flex flex-wrap gap-2">{([['letra', 'Por letra (A, B…)'], ['numero', 'Por número (1, 2…)'], ['nome', 'Cada um com um nome'], ['sem', 'Sem blocos']] as const).map(([k, l]) =>
+          <legend className="font-medium text-sm">1. Como se identifica cada {g}?</legend>
+          <div className="flex flex-wrap gap-2">{([['letra', 'Por letra (A, B…)'], ['numero', 'Por número (1, 2…)'], ['nome', 'Cada um com um nome'], ['sem', `Sem ${g}`]] as const).map(([k, l]) =>
             <label key={k} className={`min-h-10 px-3 rounded-xl border text-sm inline-flex items-center gap-2 cursor-pointer ${style === k ? 'border-primary bg-surface-2' : 'border-line'}`}>
               <input type="radio" name="style" checked={style === k} onChange={() => { setStyle(k); setPreview(null); }} />{l}</label>)}</div>
-          {(style === 'letra' || style === 'numero') && <Field label="Quantos blocos?"><Input type="number" className="w-24" min={1} max={60} value={count} onChange={(e) => { setCount(+e.target.value || 1); setPreview(null); }} /></Field>}
-          {style === 'nome' && <Field label="Nomes dos blocos" hint="Um por linha ou separados por vírgula. Ex.: Ipê, Jacarandá, Manacá">
+          {(style === 'letra' || style === 'numero') && <Field label={`Quantidade (${g})`}><Input type="number" className="w-24" min={1} max={60} value={count} onChange={(e) => { setCount(+e.target.value || 1); setPreview(null); }} /></Field>}
+          {style === 'nome' && <Field label={`Nomes (${g})`} hint="Um por linha ou separados por vírgula. Ex.: Ipê, Jacarandá, Manacá">
             <textarea className="w-full min-h-20 rounded-xl border border-line bg-surface px-3 py-2 text-sm" value={names} onChange={(e) => { setNames(e.target.value); setPreview(null); }} /></Field>}
-          {style !== 'sem' && <p className="text-xs text-muted">Blocos: {blocks.join(', ') || '—'}</p>}
+          {style !== 'sem' && <p className="text-xs text-muted">{labels.group}: {blocks.join(', ') || '—'}</p>}
         </fieldset>
         <fieldset className="space-y-2">
-          <legend className="font-medium text-sm">2. Como são os apartamentos? (iguais em todos os blocos)</legend>
+          <legend className="font-medium text-sm">2. Como é a numeração ({n})? Igual em todos ({g})</legend>
           <div className="flex flex-wrap gap-2">{([['floors', 'Por andar (101, 102… 201…)'], ['range', 'Sequência (1, 2, 3… ou Casa 1…)']] as const).map(([k, l]) =>
             <label key={k} className={`min-h-10 px-3 rounded-xl border text-sm inline-flex items-center gap-2 cursor-pointer ${mode === k ? 'border-primary bg-surface-2' : 'border-line'}`}>
               <input type="radio" name="mode" checked={mode === k} onChange={() => { setMode(k); setPreview(null); }} />{l}</label>)}</div>
           <div className="flex flex-wrap gap-3 items-end">
-            {mode === 'floors' ? <>{field('floor_from', 'Do andar')}{field('floor_to', 'até o andar')}{field('per_floor', 'Aptos por andar')}</>
+            {mode === 'floors' ? <>{field('floor_from', 'Do andar')}{field('floor_to', 'até o andar')}{field('per_floor', 'Unidades por andar')}</>
               : <>{field('from', 'Do número')}{field('to', 'até')}{field('prefix', 'Prefixo (opcional)', 'w-32')}</>}
           </div>
-          {mode === 'floors' && <p className="text-xs text-muted">Numeração: andar × 100 + posição. Ex.: 1º andar com 4 aptos = 101 a 104; 10º andar = 1001 a 1004.</p>}
+          {mode === 'floors' && <p className="text-xs text-muted">Numeração: andar × 100 + posição. Ex.: 1º andar com 4 unidades = 101 a 104; 10º andar = 1001 a 1004.</p>}
         </fieldset>
-        <p className="text-sm">Serão criadas <strong>{total.toLocaleString('pt-BR')}</strong> unidade(s){blocks.length > 1 ? ` em ${blocks.length} blocos` : ''}.</p>
-        {total > 2000 && <Alert tone="warning">O máximo por vez é 2.000 unidades. Monte em partes (por exemplo, alguns blocos de cada vez).</Alert>}
+        <p className="text-sm">Serão criadas <strong>{total.toLocaleString('pt-BR')}</strong> unidade(s){blocks.length > 1 ? ` em ${blocks.length} (${g})` : ''}.</p>
+        {total > 2000 && <Alert tone="warning">O máximo por vez é 2.000 unidades. Monte em partes (por exemplo, alguns de cada vez).</Alert>}
         {preview && <div className="space-y-2">
           {preview.errors?.length > 0
             ? <Alert tone="danger">{preview.errors.length} unidade(s) com problema (ex.: já cadastradas). Nada será gravado enquanto houver erro.<ul className="mt-1 text-xs">{preview.errors.slice(0, 8).map((e: any) => <li key={e.line}>Item {e.line}: {e.error}</li>)}</ul></Alert>
             : <Alert tone="success">Conferido: {preview.valid} unidade(s) prontas para cadastrar.</Alert>}
           <div className="max-h-40 overflow-y-auto rounded-xl bg-surface-2 p-3 text-xs flex flex-wrap gap-1">
-            {(preview.preview || []).map((u: any, i: number) => <span key={i} className="px-2 py-0.5 rounded-full bg-surface border border-line">{unitName(u.block, u.label)}</span>)}
+            {(preview.preview || []).map((u: any, i: number) => <span key={i} className="px-2 py-0.5 rounded-full bg-surface border border-line">{unitName(u.block, u.label, labels)}</span>)}
             {preview.count > 60 && <span className="text-muted">… e mais {preview.count - 60}</span>}
           </div>
         </div>}
@@ -244,6 +250,7 @@ function GenerateUnitsModal({ onClose, onDone }: { onClose: () => void; onDone: 
 
 function NewUnitModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const t = useTenant();
+  const labels = useUnitLabels();
   const [block, setBlock] = useState('');
   const [label, setLabel] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -264,8 +271,8 @@ function NewUnitModal({ onClose, onDone }: { onClose: () => void; onDone: () => 
   return (
     <Modal title="Nova unidade" onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
-        <Field label="Bloco/Torre (opcional)"><Input value={block} maxLength={30} onChange={(e) => setBlock(e.target.value)} /></Field>
-        <Field label="Unidade" error={error}><Input required maxLength={30} placeholder="101A, Casa 12…" value={label} onChange={(e) => setLabel(e.target.value)} /></Field>
+        <Field label={`${labels.group} (opcional)`}><Input value={block} maxLength={30} onChange={(e) => setBlock(e.target.value)} /></Field>
+        <Field label={labels.number} error={error}><Input required maxLength={30} placeholder="101A, Casa 12…" value={label} onChange={(e) => setLabel(e.target.value)} /></Field>
         <Button type="submit" loading={busy} className="w-full">Adicionar unidade</Button>
       </form>
     </Modal>
@@ -278,8 +285,13 @@ function ResidentsTab({ members, invites, unitsById, canApprove, onChanged }: {
   const t = useTenant();
   const [q, setQ] = useState('');
   const [limit, setLimit] = useState(PAGE);
+  const [edit, setEdit] = useState<any>(null);
+  const [del, setDel] = useState<any>(null);
+  const [editInvite, setEditInvite] = useState<any>(null);
   const { run } = useAction();
   if (!members) return <Spinner />;
+  const units = Object.values(unitsById);
+  const done = (close: (v: null) => void) => () => { close(null); onChanged(); };
   const residents = members.filter((m) => m.role === 'morador');
   const resetPw = (m: any) => {
     if (!confirm(`Enviar a ${m.full_name || m.email} um e-mail com o link para criar uma nova senha? Você não vê nem define a senha do morador.`)) return;
@@ -288,7 +300,7 @@ function ResidentsTab({ members, invites, unitsById, canApprove, onChanged }: {
       toast.success(`Link enviado para ${r.email}.`);
     });
   };
-  const unitsOf = (m: any) => (m.units || []).filter((x: any) => x.status === 'active').map((x: any) => unitName(x.block, x.label)).join(', ');
+  const unitsOf = (m: any) => (m.units || []).filter((x: any) => x.status === 'active').map((x: any) => unitName(x.block, x.label, t.unitLabels)).join(', ');
   const needle = q.trim().toLowerCase();
   const shown = residents.filter((m) => `${m.full_name || ''} ${m.email} ${unitsOf(m)}`.toLowerCase().includes(needle));
   const toggle = (m: any) => {
@@ -316,12 +328,14 @@ function ResidentsTab({ members, invites, unitsById, canApprove, onChanged }: {
                 return (
                   <li key={m.membership_id} className="py-2 flex items-center justify-between gap-2 text-sm">
                     <div className="min-w-0">
-                      <p className="font-medium truncate">{m.full_name || <span className="text-muted">Sem nome</span>} {m.status !== 'active' && <Badge tone="danger">revogado</Badge>}</p>
+                      <p className="font-medium truncate">{m.full_name || <span className="text-muted">Sem nome</span>} {m.status !== 'active' && <Badge tone={m.status === 'pending' ? 'warning' : 'danger'}>{m.status === 'pending' ? 'pendente' : 'revogado'}</Badge>}</p>
                       <p className="text-muted truncate">{m.email} · {us || 'sem unidade ativa'}</p>
                     </div>
                     {canApprove && <RowMenu label={`Ações de ${m.full_name || m.email}`} items={[
+                      { label: 'Editar cadastro', onClick: () => setEdit(m) },
                       ...(m.status === 'active' ? [{ label: 'Enviar link de nova senha', onClick: () => resetPw(m) }] : []),
                       { label: m.status === 'active' ? 'Revogar acesso' : 'Reativar acesso', danger: m.status === 'active', onClick: () => toggle(m) },
+                      { label: 'Excluir cadastro', danger: true, onClick: () => setDel(m) },
                     ]} />}
                   </li>
                 );
@@ -338,14 +352,20 @@ function ResidentsTab({ members, invites, unitsById, canApprove, onChanged }: {
               const u = i.unit_id ? unitsById[i.unit_id] : null;
               return (
                 <li key={i.id} className="py-2 flex flex-wrap justify-between items-center gap-2 text-sm">
-                  <span className="min-w-0 break-all">{i.email}{u ? ` · ${unitName(u.block, u.label)}` : ''} <span className="text-muted">· expira {new Date(i.expires_at).toLocaleDateString('pt-BR')}</span></span>
-                  {canApprove && <Button variant="ghost" onClick={() => run(async () => { await rpc('revoke_invitation', { p_invitation: i.id }); onChanged(); }, 'Convite revogado.')}>Revogar</Button>}
+                  <span className="min-w-0 break-all">{i.email}{u ? ` · ${unitName(u.block, u.label, t.unitLabels)}` : ''} <span className="text-muted">· expira {new Date(i.expires_at).toLocaleDateString('pt-BR')}</span></span>
+                  {canApprove && <span className="flex gap-1">
+                    <Button variant="ghost" onClick={() => setEditInvite(i)}>Editar</Button>
+                    <Button variant="ghost" onClick={() => run(async () => { await rpc('revoke_invitation', { p_invitation: i.id }); onChanged(); }, 'Convite revogado.')}>Revogar</Button>
+                  </span>}
                 </li>
               );
             })}
           </ul>
         </Card>
       )}
+      {edit && <ResidentEditModal userId={edit.user_id} units={units} onClose={() => setEdit(null)} onDone={done(setEdit)} />}
+      {del && <ResidentDeleteModal member={del} onClose={() => setDel(null)} onDone={done(setDel)} />}
+      {editInvite && <InvitationEditModal invite={editInvite} units={units} onClose={() => setEditInvite(null)} onDone={done(setEditInvite)} />}
     </div>
   );
 }
@@ -367,7 +387,7 @@ function InviteModal({ role: initialRole, unitId, units, onClose, onDone }: { ro
     });
   };
   return (
-    <Modal title={role === 'morador' ? `Convidar morador — ${unitName(unit?.block, unit?.label)}` : 'Convidar equipe'} onClose={link ? onDone : onClose}>
+    <Modal title={role === 'morador' ? `Convidar morador — ${unitName(unit?.block, unit?.label, t.unitLabels)}` : 'Convidar equipe'} onClose={link ? onDone : onClose}>
       {link ? (
         <div className="space-y-3">
           <Alert tone="warning">O convite foi criado, mas o e-mail não pôde ser enviado (serviço de e-mail não configurado ou indisponível). Envie este link à pessoa por um canal seguro:</Alert>
@@ -402,6 +422,8 @@ function InviteModal({ role: initialRole, unitId, units, onClose, onDone }: { ro
 
 function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const t = useTenant();
+  const labels = useUnitLabels();
+  const g = labels.group.toLocaleLowerCase('pt-BR'), n = labels.number.toLocaleLowerCase('pt-BR');
   const [rows, setRows] = useState<{ block: string; label: string }[] | null>(null);
   const [result, setResult] = useState<any>(null);
   const { busy, run } = useAction();
@@ -409,7 +431,7 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
     if (f.size > 1024 * 1024) return toast.error('Arquivo muito grande (máx. 1 MB).');
     const parsed = parseCsv(await f.text());
     const header = parsed[0]?.map((h) => h.toLowerCase());
-    const hasHeader = header?.some((h) => /bloco|torre|unidade|apto/.test(h));
+    const hasHeader = header?.some((h) => /bloco|torre|unidade|apto|apartamento|quadra|rua|lote|casa/.test(h) || h === g || h === n);
     const data = (hasHeader ? parsed.slice(1) : parsed).map((r) => (r.length === 1 ? { block: '', label: r[0] } : { block: r[0], label: r[1] }));
     setRows(data);
     const r = await run(() => rpc('import_units', { p_tenant: t.tenant.id, p_rows: data, p_dry_run: true }));
@@ -423,7 +445,7 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
   return (
     <Modal title="Importar unidades (CSV)" onClose={onClose}>
       <div className="space-y-3 text-sm">
-        <p className="text-muted">Colunas: <code>bloco;unidade</code> (bloco pode ficar vazio). Ex.: <code>A;101</code>, <code>;Casa 12</code>. Nada é gravado antes da prévia sem erros.</p>
+        <p className="text-muted">Colunas: <code>{g};{n}</code> ({g} pode ficar vazio). Ex.: <code>A;101</code>, <code>;12</code>. Nada é gravado antes da prévia sem erros.</p>
         <input type="file" accept=".csv,text/csv" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
         {busy && <Spinner label="Validando…" />}
         {result && (
@@ -446,6 +468,7 @@ function AccessRequests({ units, onDecided }: { units: UnitRow[]; onDecided: () 
   const [status, setStatus] = useState('pending');
   const [rows, setRows] = useState<any[] | null>(null);
   const [pick, setPick] = useState<Record<string, string>>({});
+  const [editReq, setEditReq] = useState<any>(null);
   const { busy, run } = useAction();
   const [incomplete, setIncomplete] = useState<any[]>([]);
   const load = useCallback(() => {
@@ -464,13 +487,21 @@ function AccessRequests({ units, onDecided }: { units: UnitRow[]; onDecided: () 
     await load(); onDecided();
     dispatchEvent(new Event('pp:access-requests')); // contador do menu
   }, approve ? 'Cadastro aprovado.' : 'Solicitação recusada.');
+  const cancel = (r: any) => {
+    if (!confirm(`Cancelar a solicitação de ${r.full_name}? A pessoa não é avisada; o aceite do termo fica registrado e ela pode pedir de novo pelo portal.`)) return;
+    run(async () => {
+      await rpc('access_request_cancel', { p_request: r.id });
+      await load();
+      dispatchEvent(new Event('pp:access-requests'));
+    }, 'Solicitação cancelada.');
+  };
   if (!rows) return <Spinner />;
   return (
     <Card className="space-y-3" data-tour="solicitacoes">
       <div className="flex flex-wrap justify-between items-center gap-2">
         <p className="font-semibold">Solicitações de cadastro {status === 'pending' ? `(${rows.length})` : ''}</p>
         <Select aria-label="Filtrar solicitações" value={status} onChange={(e) => setStatus(e.target.value)} className="w-44">
-          <option value="pending">Pendentes</option><option value="approved">Aprovadas</option><option value="rejected">Recusadas</option><option value="">Todas</option>
+          <option value="pending">Pendentes</option><option value="approved">Aprovadas</option><option value="rejected">Recusadas</option><option value="cancelled">Canceladas</option><option value="">Todas</option>
         </Select>
       </div>
       {rows.length === 0 ? <Empty title="Nenhuma solicitação">{status === 'pending' ? 'Moradores pedem acesso pelo link do portal do condomínio. Os pedidos aparecem aqui para aprovação.' : null}</Empty> : (
@@ -480,7 +511,7 @@ function AccessRequests({ units, onDecided }: { units: UnitRow[]; onDecided: () 
               <p><strong>{r.full_name}</strong> <span className="text-muted">{r.email}{r.phone ? ` · ${maskPhone(r.phone)}` : ''}</span>
                 {r.email_verified === false && <> <Badge tone="warning">e-mail não confirmado</Badge></>}</p>
               <p>Informou: <strong>{[r.block_text, r.unit_text].filter(Boolean).join(' ')}</strong>{relationLabel(r.relation) && <> · {relationLabel(r.relation)}</>} · {new Date(r.created_at).toLocaleString('pt-BR')}
-                {r.status !== 'pending' && <> · <Badge tone={r.status === 'approved' ? 'success' : 'danger'}>{r.status === 'approved' ? 'aprovada' : 'recusada'}</Badge>{r.reason ? ` ${r.reason}` : ''}</>}</p>
+                {r.status !== 'pending' && <> · <Badge tone={r.status === 'approved' ? 'success' : r.status === 'cancelled' ? 'neutral' : 'danger'}>{{ approved: 'aprovada', cancelled: 'cancelada' }[r.status as string] || 'recusada'}</Badge>{r.reason ? ` ${r.reason}` : ''}</>}</p>
               <p>{r.privacy_version
                 ? <Badge tone="success">Termo de dados {r.privacy_version} aceito em {new Date(r.privacy_accepted_at).toLocaleString('pt-BR')}</Badge>
                 : <Badge tone="warning">Sem aceite do termo de dados registrado</Badge>}
@@ -490,11 +521,13 @@ function AccessRequests({ units, onDecided }: { units: UnitRow[]; onDecided: () 
                   <Field label={r.unit_id ? 'Unidade (encontrada)' : 'Unidade não encontrada: escolha'}>
                     <Select value={pick[r.id] ?? r.unit_id ?? ''} onChange={(e) => setPick({ ...pick, [r.id]: e.target.value })}>
                       <option value="">Selecione…</option>
-                      {active.map((u) => <option key={u.id} value={u.id}>{unitName(u.block, u.label)}</option>)}
+                      {active.map((u) => <option key={u.id} value={u.id}>{unitName(u.block, u.label, t.unitLabels)}</option>)}
                     </Select>
                   </Field>
                   <Button loading={busy} disabled={!(pick[r.id] || r.unit_id)} onClick={() => decide(r, true)}>Aprovar</Button>
                   <Button variant="ghost" loading={busy} onClick={() => decide(r, false)}>Recusar</Button>
+                  <Button variant="ghost" onClick={() => setEditReq(r)}>Editar</Button>
+                  <Button variant="ghost" loading={busy} onClick={() => cancel(r)}>Cancelar</Button>
                 </div>
               )}
             </li>
@@ -508,6 +541,7 @@ function AccessRequests({ units, onDecided }: { units: UnitRow[]; onDecided: () 
           <ul className="mt-2 space-y-1">{incomplete.map((d, i) => <li key={i}>{d.full_name} · {[d.block_text, d.unit_text].filter(Boolean).join(' ')} <span className="text-muted">· {new Date(d.created_at).toLocaleDateString('pt-BR')}</span></li>)}</ul>
         </details>
       )}
+      {editReq && <AccessRequestEditModal request={editReq} units={units} onClose={() => setEditReq(null)} onDone={() => { setEditReq(null); load(); }} />}
     </Card>
   );
 }

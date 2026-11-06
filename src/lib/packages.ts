@@ -6,7 +6,7 @@ export interface PackageRow {
   notes: string | null; registered_via: string; unit_id: string | null; unit_block: string | null; unit_label: string | null;
   storage_location_id: string | null; storage_code: string | null; received_at: string; stored_at: string | null;
   notified_at: string | null; picked_up_at: string | null; picked_up_by_name: string | null; pickup_method: string | null;
-  resolution_reason: string | null; courier_name: string | null;
+  resolution_reason: string | null; courier_name: string | null; received_by_name?: string | null;
 }
 
 export interface UnitRow { id: string; block: string | null; label: string; active: boolean }

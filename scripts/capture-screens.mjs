@@ -74,7 +74,7 @@ async function tenant({ name, slug, color, accent, doc, sindico, porteiro, morad
 }
 async function receive(who, t, unit, carrier, tracking, recipient, loc = 'A-1') {
   return call(who, 'receive_and_store', { p_tenant: t.T, p_idempotency_key: `cap-${crypto.randomUUID()}`, p_unit: t.units[unit],
-    p_tracking: tracking, p_carrier: carrier, p_recipient: recipient, p_notes: null, p_storage_location: t.locs[loc] });
+    p_tracking: tracking, p_carrier: carrier, p_courier: 'Entregador Teste', p_recipient: recipient, p_notes: null, p_storage_location: t.locs[loc] });
 }
 async function deliver(who, t, pkg, by) {
   const sig = `${t.T}/packages/${pkg}/signature-cap${run}.png`, photo = `${t.T}/packages/${pkg}/handover-cap${run}.png`;

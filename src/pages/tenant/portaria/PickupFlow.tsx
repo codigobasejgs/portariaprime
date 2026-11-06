@@ -134,7 +134,7 @@ export function PickupModal({ pkg, qr, onClose, onDone }: { pkg: PickupPackage; 
         <div className="rounded-xl bg-surface-2 p-3 text-sm flex gap-3">
           {labelUrl && <img src={labelUrl} alt="Foto da etiqueta no recebimento" className="h-24 w-24 rounded-lg object-cover shrink-0" />}
           <div className="min-w-0 space-y-1">
-            <p className="font-semibold">{unitName(pkg.unit_block, pkg.unit_label)} · {pkg.carrier}</p>
+            <p className="font-semibold">{unitName(pkg.unit_block, pkg.unit_label, t.unitLabels)} · {pkg.carrier}</p>
             <p className="text-muted break-all">{pkg.tracking_code || 'Sem rastreio'} · recebida {dateTime(pkg.received_at, t.tenant.timezone)}</p>
             {pkg.recipient_name && <p>Etiqueta: {pkg.recipient_name}</p>}
             <p className="font-semibold flex items-center gap-1"><MapPin className="w-4 h-4" aria-hidden /> Buscar em: {place}</p>

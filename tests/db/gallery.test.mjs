@@ -20,8 +20,8 @@ test('galeria: limite de 8, posição, dono, prefixo, retry e leitura por unidad
       const inv = await db.rpc(admin, 'create_invitation', { p_tenant: A, p_email: email, p_role: role, p_unit: un, p_permissions: '{}' });
       await db.rpc(u, 'accept_invitation', { p_token: inv.token });
     }
-    const pkg = await db.rpc(port, 'receive_package', { p_tenant: A, p_idempotency_key: 'gal-key-0001', p_unit: unit, p_tracking: null, p_carrier: 'Correios' });
-    const pkg2 = await db.rpc(port, 'receive_package', { p_tenant: A, p_idempotency_key: 'gal-key-0002', p_unit: unit, p_tracking: null, p_carrier: 'Correios' });
+    const pkg = await db.rpc(port, 'receive_package', { p_tenant: A, p_idempotency_key: 'gal-key-0001', p_unit: unit, p_tracking: null, p_carrier: 'Correios', p_courier: 'Entregador Teste' });
+    const pkg2 = await db.rpc(port, 'receive_package', { p_tenant: A, p_idempotency_key: 'gal-key-0002', p_unit: unit, p_tracking: null, p_carrier: 'Correios', p_courier: 'Entregador Teste' });
     const path = (n, tag, p = pkg.id, t = A) => `${t}/packages/${p}/label-${n}-${tag}abcdef12.jpg`;
     const store = (p, owner, metadata = { mimetype: 'image/jpeg', size: 1000 }) => db.service("insert into storage.objects (bucket_id,name,owner,metadata) values ('tenant-private',$1,$2,$3)", [p, owner, JSON.stringify(metadata)]);
     const attach = (p, u = port, pk = pkg.id, t = A) => db.rpc(u, 'attach_label_photo', { p_tenant: t, p_package: pk, p_path: p });

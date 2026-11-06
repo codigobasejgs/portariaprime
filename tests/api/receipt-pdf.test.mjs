@@ -52,3 +52,24 @@ test('três modelos geram PDF A4 válido com provas; casos extremos não quebram
   const bad = await renderReceiptPdf({ ...base, layout: {} }, { logo: new Uint8Array([60, 115, 118, 103, 62, 0, 0, 0, 0]), signature: sig, photo });
   assert.ok(bad.length > 1000);
 });
+
+test('comprovante novo separa quem recebeu na portaria (e o entregador) de quem entregou ao morador; antigo continua igual', async () => {
+  const text = async (snapshot) => {
+    const bytes = await renderReceiptPdf({ ...base, snapshot, layout: { template: 'classico', tenant_name: 'Cond' } }, {});
+    // pdf-lib grava o texto como hex nas operações Tj; decodifica para procurar os rótulos.
+    const raw = Buffer.from(bytes).toString('latin1');
+    const { inflateSync } = await import('node:zlib');
+    const streams = [...raw.matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)].map((m) => {
+      try { return inflateSync(Buffer.from(m[1], 'latin1')).toString('latin1'); } catch { return m[1]; }
+    }).join('\n');
+    return [...streams.matchAll(/<([0-9A-Fa-f]+)>\s*Tj/g)].map((m) => Buffer.from(m[1], 'hex').toString('latin1')).join('|');
+  };
+  const novo = await text({ ...base.snapshot, received_by_name: 'Carlos Porteiro', courier_name: 'João - Mercado Livre', unit_text: 'Quadra B · Lote 15' });
+  assert.match(novo, /Recebido na portaria por/);
+  assert.match(novo, /Carlos Porteiro \(Entregador: Jo.o - Mercado Livre\)/);
+  assert.match(novo, /Entregue ao morador por/);
+  assert.match(novo, /Quadra B · Lote 15|Quadra B · Lote 15/);
+  const antigo = await text(base.snapshot);
+  assert.doesNotMatch(antigo, /Recebido na portaria por/, 'snapshot antigo sem os campos: linha omitida');
+  assert.match(antigo, /Bloco A/);
+});

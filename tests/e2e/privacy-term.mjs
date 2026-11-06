@@ -87,8 +87,8 @@ try {
   await a.getByLabel('Nome completo').fill('Ana Moradora');
   await a.getByLabel('Celular / WhatsApp').fill('11988887777');
   assert.equal(await a.getByLabel('Celular / WhatsApp').inputValue(), '(11) 98888-7777', 'máscara do celular');
-  await a.getByLabel('Bloco / Torre').selectOption('A');
-  await a.getByLabel('Apartamento / Unidade').selectOption('101');
+  await a.getByLabel('Bloco', { exact: true }).selectOption('A');
+  await a.getByLabel('Apartamento', { exact: true }).selectOption('101');
   await a.getByRole('button', { name: 'Enviar meu cadastro' }).click();
   await a.getByText('Marque a ciência do termo de tratamento de dados.').waitFor();
   assert.equal(sql(`select count(*) from public.access_requests where user_id = '${ana.id}'`), '0', 'sem aceite nada é enviado');
@@ -166,8 +166,8 @@ try {
   await b.getByText('versão 2.0').first().waitFor();
   await b.getByLabel('Nome completo').fill('Bia Moradora');
   await b.getByLabel('Celular / WhatsApp').fill('21987654321');
-  await b.getByLabel('Bloco / Torre').selectOption('A');
-  await b.getByLabel('Apartamento / Unidade').selectOption('101');
+  await b.getByLabel('Bloco', { exact: true }).selectOption('A');
+  await b.getByLabel('Apartamento', { exact: true }).selectOption('101');
   await b.getByRole('checkbox').check();
   await b.getByRole('button', { name: 'Enviar meu cadastro' }).click();
   await b.getByText('versão 2.0 aceita').waitFor();

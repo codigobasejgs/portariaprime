@@ -33,7 +33,7 @@ test('layout, snapshot, retenção dos canais, conclusão única e acesso', asyn
     assert.equal((await db.sql("select count(*)::int n from audit_logs where action='receipt_layout.saved' and tenant_id=$1", [A]))[0].n, 1);
 
     // Retirada → comprovante com snapshot do layout de A.
-    const pkg = await db.rpc(port, 'receive_package', { p_tenant: A, p_idempotency_key: 'pdf-key-001', p_unit: unit, p_tracking: 'BR1', p_carrier: 'Correios' });
+    const pkg = await db.rpc(port, 'receive_package', { p_tenant: A, p_idempotency_key: 'pdf-key-001', p_unit: unit, p_tracking: 'BR1', p_carrier: 'Correios', p_courier: 'Entregador Teste' });
     const sig = `${A}/packages/${pkg.id}/signature-sig00001.png`, photo = `${A}/packages/${pkg.id}/handover-pho00001.jpg`;
     for (const p of [sig, photo]) await db.service("insert into storage.objects (bucket_id,name,owner) values ('tenant-private',$1,$2)", [p, port]);
     const req = uuid();
@@ -82,7 +82,7 @@ test('layout, snapshot, retenção dos canais, conclusão única e acesso', asyn
     await assert.rejects(db.rpc(adminB, 'receipt_pdf_access', { p_tenant: A, p_package: pkg.id }), /sem permissão/);
     await assert.rejects(db.rpc(adminB, 'receipt_pdf_access', { p_tenant: B, p_package: pkg.id }), /sem permissão/);
     // Falha de PDF: retirada continua válida; após 5 falhas o síndico é alertado e pode reprocessar.
-    const pkg2 = await db.rpc(port, 'receive_package', { p_tenant: A, p_idempotency_key: 'pdf-key-002', p_unit: unit, p_tracking: 'BR2', p_carrier: 'Correios' });
+    const pkg2 = await db.rpc(port, 'receive_package', { p_tenant: A, p_idempotency_key: 'pdf-key-002', p_unit: unit, p_tracking: 'BR2', p_carrier: 'Correios', p_courier: 'Entregador Teste' });
     const s2 = `${A}/packages/${pkg2.id}/signature-sig00002.png`, f2 = `${A}/packages/${pkg2.id}/handover-pho00002.jpg`;
     for (const p of [s2, f2]) await db.service("insert into storage.objects (bucket_id,name,owner) values ('tenant-private',$1,$2)", [p, port]);
     await db.rpc(port, 'deliver_package', { ...args, p_package: pkg2.id, p_request: uuid(), p_signature_path: s2, p_item_photo_path: f2 });

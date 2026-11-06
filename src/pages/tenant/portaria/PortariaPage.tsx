@@ -74,7 +74,7 @@ export function PortariaPage({ totem = false }: { totem?: boolean }) {
           <p className="font-semibold">Deixadas no totem — confira antes de avisar ({pre.length})</p>
           {pre.map((p) => (
             <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-2">
-              <span className="text-sm">{p.carrier} · {p.tracking_code || 'sem rastreio'} · {p.unit_label ? unitName(p.unit_block, p.unit_label) : 'unidade não informada'} · {p.courier_name || ''}</span>
+              <span className="text-sm">{p.carrier} · {p.tracking_code || 'sem rastreio'} · {p.unit_label ? unitName(p.unit_block, p.unit_label, t.unitLabels) : 'unidade não informada'} · {p.courier_name || ''}</span>
               <Button variant="secondary" onClick={() => setConfirmPre(p)}>Conferir</Button>
             </div>
           ))}
@@ -104,8 +104,11 @@ export function PortariaPage({ totem = false }: { totem?: boolean }) {
               {filtered.map((p) => (
                 <li key={p.id} className="py-3 flex flex-wrap items-center justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="font-medium">{unitName(p.unit_block, p.unit_label)} <span className="text-muted font-normal">· {p.carrier}</span></p>
+                    <p className="font-medium">{unitName(p.unit_block, p.unit_label, t.unitLabels)} <span className="text-muted font-normal">· {p.carrier}</span></p>
                     <p className="text-xs text-muted">{p.tracking_code || 'sem rastreio'} · {dateTime(p.received_at, t.tenant.timezone)}{p.storage_code ? ` · ${p.storage_code}` : ''}{p.notified_at ? ' · avisado' : ''}</p>
+                    {(p.courier_name || p.received_by_name) && <p className="text-xs text-muted">
+                      {p.received_by_name && <>Recebido por {p.received_by_name}</>}{p.courier_name && <>{p.received_by_name ? ' · ' : ''}Entregador: {p.courier_name}</>}
+                    </p>}
                   </div>
                   <div className="flex gap-2">
                     {storage.length > 0 && <Button variant="ghost" onClick={() => setMove(p)} aria-label="Mover"><ArrowRightLeft className="w-4 h-4" /></Button>}
@@ -152,7 +155,7 @@ function HistorySearch({ onReceipt }: { onReceipt: (id: string) => void }) {
         <ul className="divide-y divide-line">
           {rows.map((p) => (
             <li key={p.id} className="py-2 flex flex-wrap justify-between gap-2 text-sm">
-              <span>{unitName(p.unit_block, p.unit_label)} · {p.carrier} · {p.tracking_code || '—'} · {dateTime(p.received_at, t.tenant.timezone)}</span>
+              <span>{unitName(p.unit_block, p.unit_label, t.unitLabels)} · {p.carrier} · {p.tracking_code || '—'} · {dateTime(p.received_at, t.tenant.timezone)}</span>
               <span className="flex items-center gap-2">
                 <Badge tone={p.status === 'RETIRADA' ? 'success' : ['CANCELADA', 'DEVOLVIDA', 'EXTRAVIADA'].includes(p.status) ? 'danger' : 'warning'}>{STATUS_LABEL[p.status]}</Badge>
                 {p.status === 'RETIRADA' && <button className="text-secondary underline inline-flex items-center gap-1" onClick={() => onReceipt(p.id)}><FileText className="w-3 h-3" />Comprovante</button>}

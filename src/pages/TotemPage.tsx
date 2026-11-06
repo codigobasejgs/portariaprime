@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Card, Field, Input, Select } from '../components/ui';
 import { PortariaPrimeLogo } from '../components/Brand';
-import { CARRIERS, unitName } from '../lib/format';
+import { CARRIERS, DEFAULT_UNIT_LABELS, unitName, type UnitLabels } from '../lib/format';
 import { CameraCapture } from '../components/CameraCapture';
 import { blobToDataUrl, reencode } from '../lib/files';
 
@@ -11,6 +11,7 @@ export default function TotemPage({ slug }: { slug: string }) {
   const [code, setCode] = useState('');
   const [units, setUnits] = useState<{ id: string; block: string; label: string }[]>([]);
   const [unit, setUnit] = useState('');
+  const [labels, setLabels] = useState<UnitLabels>(DEFAULT_UNIT_LABELS);
   const [tracking, setTracking] = useState('');
   const [carrier, setCarrier] = useState('Correios');
   const [courier, setCourier] = useState('');
@@ -48,7 +49,7 @@ export default function TotemPage({ slug }: { slug: string }) {
   }
   useEffect(() => {
     let active = true;
-    if (secret) call('context').then(d => { if (active) setUnits(d.units); }).catch(e => { if (active) setError(e.message); });
+    if (secret) call('context').then(d => { if (active) { setUnits(d.units); if (d.labels) setLabels(d.labels); } }).catch(e => { if (active) setError(e.message); });
     return () => { active = false; };
   }, [secret]);
   async function submit(event: React.FormEvent) {
@@ -63,6 +64,7 @@ export default function TotemPage({ slug }: { slug: string }) {
         try { localStorage.setItem(`pp_device:${slug}`, result.deviceSecret); } catch { /* Pareamento vale nesta sessão. */ }
         setSecret(result.deviceSecret); setCode('');
       } else {
+        if (courier.trim().length < 2) throw new Error('Informe o nome do entregador.');
         const result = await call('receive', { idempotencyKey: key.current, unitId: unit || null, trackingCode: tracking, carrier, courierName: courier });
         const location = [result.concierge_name, result.storage_rack, result.storage_shelf, result.storage_code].filter(Boolean).join(' · ');
         setUnit(''); setTracking(''); setCourier(''); setCarrier('Correios'); setOcrMessage(''); key.current = crypto.randomUUID(); setDone({ location });
@@ -83,10 +85,10 @@ export default function TotemPage({ slug }: { slug: string }) {
         </fieldset>
         {ocrBusy && <p role="status">Lendo etiqueta…</p>}
         {ocrMessage && <Alert>{ocrMessage}</Alert>}
-        <Field label="Unidade"><Select required value={unit} onChange={e => setUnit(e.target.value)}><option value="">Selecione…</option>{units.map(u => <option key={u.id} value={u.id}>{unitName(u.block, u.label)}</option>)}</Select></Field>
+        <Field label="Unidade"><Select required value={unit} onChange={e => setUnit(e.target.value)}><option value="">Selecione…</option>{units.map(u => <option key={u.id} value={u.id}>{unitName(u.block, u.label, labels)}</option>)}</Select></Field>
         <Field label="Transportadora"><Select value={carrier} onChange={e => setCarrier(e.target.value)}>{CARRIERS.map(c => <option key={c}>{c}</option>)}</Select></Field>
         <Field label="Rastreio"><Input value={tracking} maxLength={80} onChange={e => setTracking(e.target.value)} /></Field>
-        <Field label="Nome do entregador"><Input value={courier} maxLength={80} onChange={e => setCourier(e.target.value)} /></Field>
+        <Field label="Nome do entregador (obrigatório)" hint="Ex.: João - Mercado Livre"><Input required minLength={2} value={courier} maxLength={80} onChange={e => setCourier(e.target.value)} /></Field>
       </>}
       {error && <Alert tone="danger">{error}</Alert>}<Button type="submit" className="w-full" loading={busy} disabled={ocrBusy}>{secret ? 'Registrar encomenda e avisar moradores' : 'Parear dispositivo'}</Button>
     </form>}

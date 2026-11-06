@@ -18,7 +18,7 @@ test('verify_receipt: código opaco, resposta mínima e uniforme', async () => {
     await db.rpc(port, 'accept_invitation', { p_token: inv.token });
 
     const deliver = async (key) => {
-      const pkg = await db.rpc(port, 'receive_package', { p_tenant: T, p_idempotency_key: key, p_unit: unit, p_tracking: null, p_carrier: 'Correios', p_recipient: 'Fulano Sigiloso' });
+      const pkg = await db.rpc(port, 'receive_package', { p_tenant: T, p_idempotency_key: key, p_unit: unit, p_tracking: null, p_carrier: 'Correios', p_courier: 'Entregador Teste', p_recipient: 'Fulano Sigiloso' });
       const sig = `${T}/packages/${pkg.id}/signature-sig${key.slice(-5)}.png`, hand = `${T}/packages/${pkg.id}/handover-han${key.slice(-5)}.jpg`;
       for (const p of [sig, hand]) await db.service("insert into storage.objects (bucket_id,name,owner) values ('tenant-private',$1,$2)", [p, port]);
       await db.rpc(port, 'deliver_package', { p_tenant: T, p_package: pkg.id, p_request: uuid(), p_qr: null, p_picked_up_by: 'Beltrano Retirante',

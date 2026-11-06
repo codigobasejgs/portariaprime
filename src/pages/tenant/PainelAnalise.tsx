@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { ArrowDownRight, ArrowUpRight, ChevronLeft, ChevronRight, Download, FileSpreadsheet, FileText, Lightbulb, RotateCcw } from 'lucide-react';
 import { rpc } from '../../lib/api';
 import { useTenant } from '../../lib/tenant';
+import { useUnitLabels } from '../../hooks/useUnitLabels';
 import { dateTime, download, STATUS_LABEL } from '../../lib/format';
 import {
   bucketLabel, cleanFilters, exportCsv, exportName, exportTables, exportXlsx, Filters, hours, insights, num, pct, periodLabel,
@@ -117,6 +118,7 @@ const PAGE = 20;
 
 export function Analysis() {
   const t = useTenant();
+  const labels = useUnitLabels();
   const tz = t.tenant.timezone;
   // Seleção por condomínio (chave com o id): nunca reaproveita filtros de outro condomínio.
   const storeKey = `pp_painel_analise:${t.tenant.id}`;
@@ -180,7 +182,7 @@ export function Analysis() {
     for (const h of d?.heatmap || []) { m.set(`${h.dow}-${h.hour}`, h.n); max = Math.max(max, h.n); }
     return { m, max };
   }, [d]);
-  const tips = useMemo(() => (d ? insights(d) : []), [d]);
+  const tips = useMemo(() => (d ? insights(d, labels) : []), [d, labels]);
   const set = (k: keyof Filters) => (e: React.ChangeEvent<HTMLSelectElement>) => setFilters((x) => ({ ...x, [k]: e.target.value }));
   const anyFilter = Object.keys(f).length > 0;
   const statuses: string[] = d?.options.statuses || [];
@@ -201,7 +203,7 @@ export function Analysis() {
     if (!d) return;
     setExporting(kind);
     try {
-      const tables = exportTables(d, await rankingForExport(), t.tenant.name);
+      const tables = exportTables(d, await rankingForExport(), t.tenant.name, labels);
       const name = exportName(t.tenant.slug, d.from, d.to, kind);
       if (kind === 'csv') download(name, exportCsv(tables));
       if (kind === 'xlsx') download(name, exportXlsx(tables), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -228,14 +230,14 @@ export function Analysis() {
             <Field label="De"><Input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} /></Field>
             <Field label="Até"><Input type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} /></Field>
           </> : <p className="text-sm text-muted sm:col-span-1 lg:col-span-2 self-center">{periodLabel(from, to)}</p>}
-          <Field label="Bloco">
+          <Field label={labels.group}>
             <Select value={f.block || ''} onChange={(e) => setFilters((x) => ({ ...x, block: e.target.value, unit: '' }))} disabled={!d?.options.blocks.length}>
               <option value="">Todos</option>{(d?.options.blocks || []).map((b: string) => <option key={b} value={b}>{b}</option>)}
             </Select>
           </Field>
           <Field label="Unidade">
             <Select value={f.unit || ''} onChange={set('unit')}>
-              <option value="">Todas</option>{units.map((u) => <option key={u.id} value={u.id}>{unitLabel(u.block, u.label)}</option>)}
+              <option value="">Todas</option>{units.map((u) => <option key={u.id} value={u.id}>{unitLabel(u.block, u.label, labels)}</option>)}
             </Select>
           </Field>
           <Field label="Situação">
@@ -323,7 +325,7 @@ export function Analysis() {
                       {rank.items.map((u: any, k: number) => (
                         <tr key={u.unit_id}>
                           <td className="py-2 text-muted tabular-nums">{rank.offset + k + 1}</td>
-                          <td className="truncate" title={unitLabel(u.block, u.unit)}>{unitLabel(u.block, u.unit)}</td>
+                          <td className="truncate" title={unitLabel(u.block, u.unit, labels)}>{unitLabel(u.block, u.unit, labels)}</td>
                           <td className="text-right tabular-nums">{num(u.received)}</td><td className="text-right tabular-nums">{num(u.delivered)}</td>
                           <td className={`text-right tabular-nums ${u.pending ? 'font-semibold' : ''}`}>{num(u.pending)}</td>
                           <td className="text-right tabular-nums hidden sm:table-cell">{pct(u.share, 1)}</td>
@@ -360,7 +362,7 @@ export function Analysis() {
                 <ul className="divide-y divide-line text-sm max-h-64 overflow-y-auto">
                   {d.oldest_waiting.map((o: any, k: number) => (
                     <li key={k} className="py-1.5 flex items-center justify-between gap-2">
-                      <span className="min-w-0 truncate">{unitLabel(o.block, o.unit)} <span className="text-muted">· {dateTime(o.received_at, tz)}</span></span>
+                      <span className="min-w-0 truncate">{unitLabel(o.block, o.unit, labels)} <span className="text-muted">· {dateTime(o.received_at, tz)}</span></span>
                       <span className="shrink-0 flex items-center gap-2"><span className="tabular-nums">{o.hours < 48 ? `${Math.round(o.hours)} h` : `${Math.floor(o.hours / 24)} d`}</span>
                         <Badge tone={o.hours > d.overdue_hours ? 'warning' : 'neutral'}>{STATUS_LABEL[o.status]}</Badge></span>
                     </li>

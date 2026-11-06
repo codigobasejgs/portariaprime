@@ -110,7 +110,7 @@ export function ContaPage() {
 
       <Section id="unidade" icon={Building2} title="Minha unidade">
         <ul className="space-y-1">
-          {p.units.map((u) => <li key={u.id} className="flex justify-between gap-2 text-sm"><span className="font-medium">{unitName(u.block, u.label)}</span><span className="text-muted">Vínculo ativo desde {dateOnly(u.since, t.tenant.timezone)}</span></li>)}
+          {p.units.map((u) => <li key={u.id} className="flex justify-between gap-2 text-sm"><span className="font-medium">{unitName(u.block, u.label, t.unitLabels)}</span><span className="text-muted">Vínculo ativo desde {dateOnly(u.since, t.tenant.timezone)}</span></li>)}
         </ul>
         <p className="text-xs text-muted">Mudou de unidade ou há algo errado? A troca é feita pela administração do condomínio, com aprovação.</p>
         <div className="pt-2 border-t border-line space-y-2">
@@ -133,7 +133,7 @@ export function ContaPage() {
           {add ? (
             <form onSubmit={addContact} className="grid sm:grid-cols-2 gap-3 rounded-xl bg-surface-2 p-3">
               <Field label="Nome do familiar"><Input required minLength={2} maxLength={120} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
-              {p.units.length > 1 && <Field label="Unidade"><select className="w-full min-h-11 rounded-xl border border-line bg-surface px-3 text-sm" value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })}>{p.units.map((u) => <option key={u.id} value={u.id}>{unitName(u.block, u.label)}</option>)}</select></Field>}
+              {p.units.length > 1 && <Field label="Unidade"><select className="w-full min-h-11 rounded-xl border border-line bg-surface px-3 text-sm" value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })}>{p.units.map((u) => <option key={u.id} value={u.id}>{unitName(u.block, u.label, t.unitLabels)}</option>)}</select></Field>}
               {p.whatsapp_available && <Field label="Celular com DDD (WhatsApp)"><Input type="tel" inputMode="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></Field>}
               <Field label="E-mail"><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
               <div className="flex gap-2 sm:col-span-2"><Button type="submit" loading={busy}>Adicionar</Button><Button type="button" variant="ghost" onClick={() => setAdd(false)}>Cancelar</Button></div>

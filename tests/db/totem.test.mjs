@@ -16,7 +16,7 @@ async function resident(email, name, unit) {
   return id;
 }
 const receive = (extra = {}) => db.rpc(port, 'receive_and_store', {
-  p_tenant: T, p_idempotency_key: uuid(), p_unit: u12b, p_tracking: null, p_carrier: 'Correios',
+  p_tenant: T, p_idempotency_key: uuid(), p_unit: u12b, p_tracking: null, p_carrier: 'Correios', p_courier: 'Entregador Teste',
   p_recipient: 'Jefferson Gomes dos Santos', p_notes: null, p_storage_location: rackA, p_label_sha256: null, ...extra,
 });
 
@@ -59,6 +59,16 @@ test('correspondência: nome + 12B confere; remetente/código de transportadora 
   assert.equal((await db.rpc(port, 'match_recipient', { p_tenant: T, p_name: 'Fulano Remetente Ltda', p_block: null, p_unit: '12B' })).status, 'unit_only');
   // Morador não usa a busca (não enumera moradores).
   await rejects(db.rpc(m1, 'match_recipient', { p_tenant: T, p_name: 'Maria', p_block: null, p_unit: '12B' }), /Sem permissão/);
+});
+
+test('correspondência em endereço horizontal: quadra/lote e rua/casa com ou sem prefixo', async () => {
+  const [{ id: lote }] = await db.as(admin, `insert into units (tenant_id, block, label) values ($1, 'Qd 3', 'Lote 15') returning id`, [T]);
+  const [{ id: casa }] = await db.as(admin, `insert into units (tenant_id, block, label) values ($1, 'Rua 2', '7') returning id`, [T]);
+  for (const [b, u, id] of [['Quadra 3', '15', lote], ['3', 'Lt 15', lote], ['QD3', 'LT15', lote], ['Rua 2', 'Casa 7', casa]]) {
+    const r = await db.rpc(port, 'match_recipient', { p_tenant: T, p_name: null, p_block: b, p_unit: u });
+    assert.equal(r.unit_id, id, `${b} / ${u}`);
+  }
+  assert.notEqual((await db.rpc(port, 'match_recipient', { p_tenant: T, p_name: null, p_block: 'Quadra 4', p_unit: '15' })).unit_id, lote, 'outra quadra não casa');
 });
 
 test('recebimento exige local confirmado; última vaga não é dada duas vezes; foto repetida recusada', async () => {

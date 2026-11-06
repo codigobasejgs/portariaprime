@@ -3,7 +3,7 @@ import { Copy, Download, FileText, MessageCircle, RotateCcw, Share2 } from 'luci
 import { rpc } from '../../../lib/api';
 import { useTenant } from '../../../lib/tenant';
 import { publicLogoUrl } from '../../../lib/theme';
-import { download } from '../../../lib/format';
+import { download, unitName } from '../../../lib/format';
 import {
   draw, effective, fileName, LIMITS, Model, MODELS, portalLink, shareMessage, Texts, toPdf, toPng, whatsappUrl,
 } from '../../../lib/divulgacao';
@@ -32,6 +32,7 @@ function useLogo(url: string | null) {
 export function DivulgacaoCard() {
   const t = useTenant();
   const canEdit = t.can('settings');
+  const g = t.unitLabels.group.toLowerCase();
   const name = t.branding?.display_name || t.tenant.name;
   // QR por bloco: o morador já chega com o bloco escolhido no cadastro (só o nome do bloco vai no link).
   const [blocks, setBlocks] = useState<string[]>([]);
@@ -77,7 +78,7 @@ export function DivulgacaoCard() {
     const v = await rpc<Record<string, Partial<Texts>>>('divulgacao_save', { p_tenant: t.tenant.id, p_model: model, p_texts: {} });
     setSaved(v || {});
   }, 'Textos padrão restaurados.');
-  const fileSlug = block ? `${t.tenant.slug}-bloco-${block.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` : t.tenant.slug;
+  const fileSlug = block ? `${t.tenant.slug}-${g.normalize('NFD').replace(/[^a-z0-9]+/g, '')}-${block.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` : t.tenant.slug;
   const png = () => run(async () => download(fileName(fileSlug, model, 'png'), new Uint8Array(await (await toPng(canvas.current!)).arrayBuffer()), 'image/png'));
   const pdf = () => run(async () => download(fileName(fileSlug, model, 'pdf'), await toPdf(canvas.current!, model, `${texts.title} — ${name}`), 'application/pdf'));
   const copy = (s: string, ok: string) => run(async () => { await navigator.clipboard.writeText(s); }, ok);
@@ -99,9 +100,9 @@ export function DivulgacaoCard() {
         <p className="text-sm font-medium">QR Code de</p>
         <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="QR Code de">
           {['', ...blocks].map((b) => <button key={b || 'geral'} type="button" role="radio" aria-checked={block === b} onClick={() => setBlock(b)}
-            className={`min-h-9 px-3 rounded-full text-sm border ${block === b ? 'bg-primary text-primary-fg border-primary' : 'border-line hover:bg-surface-2'}`}>{b ? `Bloco ${b}` : 'Entrada (todos os blocos)'}</button>)}
+            className={`min-h-9 px-3 rounded-full text-sm border ${block === b ? 'bg-primary text-primary-fg border-primary' : 'border-line hover:bg-surface-2'}`}>{b ? unitName(b, null, t.unitLabels) : `Entrada (todos: ${g})`}</button>)}
         </div>
-        <p className="text-xs text-muted">Imprima um para a entrada e um para cada bloco: o morador que lê o QR do bloco já chega com o bloco escolhido.</p>
+        <p className="text-xs text-muted">Imprima um para a entrada e um para cada {g}: o morador que lê esse QR já chega com a opção escolhida no cadastro.</p>
       </div>}
 
       <div role="radiogroup" aria-label="Modelo" className="grid grid-cols-2 lg:grid-cols-4 gap-2">

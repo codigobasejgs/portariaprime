@@ -19,7 +19,7 @@ test('falhas, alertas, reenvio, diagnóstico e inscrição push', async () => {
       const inv = await db.rpc(admin, 'create_invitation', { p_tenant: T, p_email: email, p_role: role, p_unit: un, p_permissions: '{}' });
       await db.rpc(u, 'accept_invitation', { p_token: inv.token });
     }
-    const pkg = await db.rpc(port, 'receive_package', { p_tenant: T, p_idempotency_key: 'ops-key-0001', p_unit: unit, p_tracking: null, p_carrier: 'Correios' });
+    const pkg = await db.rpc(port, 'receive_package', { p_tenant: T, p_idempotency_key: 'ops-key-0001', p_unit: unit, p_tracking: null, p_carrier: 'Correios', p_courier: 'Entregador Teste' });
     const [job] = await db.sql("select id from notification_jobs where ref_id=$1 and channel='email'", [pkg.id]);
     const complete = (status, error, final = false) => db.service('select public.complete_notification_job($1,$2,null,$3,$4)', [job.id, status, error, final]);
 

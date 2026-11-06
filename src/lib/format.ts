@@ -19,8 +19,23 @@ export const STATUS_LABEL: Record<string, string> = {
   EXTRAVIADA: 'Extraviada',
 };
 
-export const unitName = (block?: string | null, label?: string | null) =>
-  [block ? `Bloco ${block}` : null, label].filter(Boolean).join(' · ') || '—';
+export interface UnitLabels { group: string; number: string }
+export const DEFAULT_UNIT_LABELS: UnitLabels = { group: 'Bloco', number: 'Apartamento' };
+
+/** Puro: cada chamada recebe a nomenclatura do próprio condomínio. */
+export function unitName(block?: string | null, label?: string | null, labels: UnitLabels = DEFAULT_UNIT_LABELS) {
+  const prefix = (value: string | null | undefined, name: string, omit = false) => {
+    const text = value?.trim();
+    if (!text) return null;
+    const start = text.slice(0, name.length).toLocaleLowerCase('pt-BR');
+    const rest = text.slice(name.length);
+    const already = start === name.toLocaleLowerCase('pt-BR') && (!rest || /^[\s\d.,:º°-]/.test(rest));
+    return omit || already ? text : `${name} ${text}`;
+  };
+  const group = labels.group.trim() || DEFAULT_UNIT_LABELS.group;
+  const number = labels.number.trim() || DEFAULT_UNIT_LABELS.number;
+  return [prefix(block, group), prefix(label, number, number.toLowerCase() === 'apartamento')].filter(Boolean).join(' · ') || '—';
+}
 
 export const CARRIERS = ['Correios', 'Mercado Livre', 'Amazon', 'Shopee', 'Loggi', 'Outra'];
 

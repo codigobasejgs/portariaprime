@@ -15,7 +15,7 @@ async function setup() {
   return { db, admin, tenant, unit };
 }
 const receive = (s, key) => s.db.rpc(s.admin, 'receive_package', {
-  p_tenant: s.tenant, p_idempotency_key: key, p_unit: s.unit, p_tracking: key, p_carrier: 'Correios',
+  p_tenant: s.tenant, p_idempotency_key: key, p_unit: s.unit, p_tracking: key, p_carrier: 'Correios', p_courier: 'Entregador Teste',
 });
 async function openOrder(s) {
   await s.db.service('select public.billing_tick()');

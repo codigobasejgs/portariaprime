@@ -118,9 +118,11 @@ export function EncomendaPage() {
           <StatusBadge status={p.status} />
         </div>
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-          <dt className="text-muted">Unidade</dt><dd>{unitName(p.unit_block, p.unit_label)}</dd>
+          <dt className="text-muted">Unidade</dt><dd>{unitName(p.unit_block, p.unit_label, t.unitLabels)}</dd>
           {p.recipient_name && <><dt className="text-muted">Para</dt><dd className="break-words">{p.recipient_name}</dd></>}
           {p.concierge_name && <><dt className="text-muted">{waiting ? 'Retirar em' : 'Portaria'}</dt><dd>{p.concierge_name}</dd></>}
+          {p.received_by_name && <><dt className="text-muted">Recebida por</dt><dd>{p.received_by_name}</dd></>}
+          {p.courier_name && <><dt className="text-muted">Entregador</dt><dd className="break-words">{p.courier_name}</dd></>}
           {p.picked_up_by_name && <><dt className="text-muted">Retirada por</dt><dd>{p.picked_up_by_name}</dd></>}
         </dl>
         {waiting && <Button onClick={() => setQr(true)} className="w-full sm:w-auto">Mostrar QR de retirada</Button>}

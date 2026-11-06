@@ -13,6 +13,7 @@ import { OrgLinkCard } from './config/OrgLinkCard';
 import { RemindersCard } from './config/RemindersCard';
 import { SecurityCard } from './config/SecurityCard';
 import { CondoCard } from './config/CondoCard';
+import { AddressingCard } from './config/AddressingCard';
 import { DevicesCard } from './config/DevicesCard';
 import { PrivacyTermCard } from './config/PrivacyTermCard';
 import { DivulgacaoCard } from './config/DivulgacaoCard';
@@ -27,8 +28,8 @@ const settings = (t: T) => t.can('settings');
  * (/c/{slug}/configuracoes?m={id}). Os cards são os mesmos de antes, só reorganizados.
  */
 export const MODULES: Mod[] = [
-  { id: 'condominio', title: 'Condomínio', desc: 'Nome, CNPJ/CPF, contatos e fuso horário.', keys: 'dados cadastrais cnpj cpf endereco contato fuso horario nome',
-    allowed: settings, render: () => <CondoCard /> },
+  { id: 'condominio', title: 'Condomínio', desc: 'Nome, CNPJ/CPF, contatos, fuso horário e nomes das unidades.', keys: 'dados cadastrais cnpj cpf endereco contato fuso horario nome bloco torre quadra lote rua casa apartamento unidade nomenclatura enderecamento',
+    allowed: settings, render: () => <><CondoCard /><AddressingCard /></> },
   { id: 'identidade', title: 'Identidade visual', desc: 'Logo principal, cores, tema e prévia.', keys: 'marca logo cores tema aparencia nome exibido',
     allowed: settings, render: () => <BrandingCard /> },
   { id: 'portal', title: 'Portal e aplicativo', desc: 'Link público, QR de acesso, ícone do app e divulgação aos moradores.', keys: 'link endereco qr compartilhar app pwa instalar icone autocadastro divulgacao cartaz comunicado whatsapp elevador mural',

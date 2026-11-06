@@ -4,6 +4,7 @@ import { rpc } from './api';
 import { applyTheme, Branding } from './theme';
 import type { TenantLink } from './session';
 import { loadTenantInfo } from './tenant-data';
+import type { UnitLabels } from './format';
 import { Alert, Button, Spinner } from '../components/ui';
 
 export interface TenantInfo {
@@ -11,15 +12,17 @@ export interface TenantInfo {
   tenant: { id: string; slug: string; name: string; timezone: string; status: string };
   branding: Branding | null;
   overview: any | null; // subscription_overview
+  unitLabels: UnitLabels;
+  condoType: string;
 }
 
-interface TenantState extends TenantInfo {
+export interface TenantState extends TenantInfo {
   reload: () => Promise<void>;
   can: (perm: 'team' | 'approve' | 'billing' | 'settings') => boolean;
   isStaff: boolean;
 }
 
-const TenantContext = createContext<TenantState>(null!);
+export const TenantContext = createContext<TenantState>(null!);
 export const useTenant = () => useContext(TenantContext);
 
 export function TenantProvider({ link, children }: { link: TenantLink; children: React.ReactNode }) {

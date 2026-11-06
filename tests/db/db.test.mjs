@@ -89,24 +89,24 @@ test('isolamento: usuário de A não lê nem grava dados de B (tabelas, RPC, sto
   const upd = await db.as(adminA, `update public.units set label = 'hack' where id = $1 returning id`, [unitB]);
   assert.equal(upd.length, 0);
   await rejects(db.rpc(adminA, 'receive_package', { p_tenant: B, p_idempotency_key: 'x-key-0001', p_unit: unitB,
-    p_tracking: 'T1', p_carrier: 'Correios' }), /Sem permissão/);
+    p_tracking: 'T1', p_carrier: 'Correios', p_courier: 'Entregador Teste' }), /Sem permissão/);
   // Encomenda de A não pode apontar para unidade de B (FK composta).
   await rejects(db.rpc(adminA, 'receive_package', { p_tenant: A, p_idempotency_key: 'x-key-0002', p_unit: unitB,
-    p_tracking: 'T1', p_carrier: 'Correios' }), /Unidade inválida/);
+    p_tracking: 'T1', p_carrier: 'Correios', p_courier: 'Entregador Teste' }), /Unidade inválida/);
   await rejects(db.service(`insert into public.packages (tenant_id, unit_id, status, idempotency_key) values ($1, $2, 'RECEBIDA', 'svc-cross-1')`, [A, unitB]), /foreign key/);
   const [{ n }] = await db.sql(`select count(*)::int n from public.packages where tenant_id = $1`, [B]);
   assert.equal(n, 0);
 });
 
 test('mesmo rastreio em condomínios diferentes não colide; duplicado ativo no mesmo condomínio é recusado', async () => {
-  await db.rpc(portA, 'receive_package', { p_tenant: A, p_idempotency_key: 'rk-a-0001', p_unit: unitA, p_tracking: 'BR123', p_carrier: 'Correios' });
-  await db.rpc(adminB, 'receive_package', { p_tenant: B, p_idempotency_key: 'rk-b-0001', p_unit: unitB, p_tracking: 'BR123', p_carrier: 'Correios' });
-  await rejects(db.rpc(portA, 'receive_package', { p_tenant: A, p_idempotency_key: 'rk-a-0002', p_unit: unitA, p_tracking: 'br123', p_carrier: 'Correios' }), /Já existe uma encomenda pendente/);
+  await db.rpc(portA, 'receive_package', { p_tenant: A, p_idempotency_key: 'rk-a-0001', p_unit: unitA, p_tracking: 'BR123', p_carrier: 'Correios', p_courier: 'Entregador Teste' });
+  await db.rpc(adminB, 'receive_package', { p_tenant: B, p_idempotency_key: 'rk-b-0001', p_unit: unitB, p_tracking: 'BR123', p_carrier: 'Correios', p_courier: 'Entregador Teste' });
+  await rejects(db.rpc(portA, 'receive_package', { p_tenant: A, p_idempotency_key: 'rk-a-0002', p_unit: unitA, p_tracking: 'br123', p_carrier: 'Correios', p_courier: 'Entregador Teste' }), /Já existe uma encomenda pendente/);
 });
 
 test('lotação: local cheio não recebe e não há fallback silencioso', async () => {
   // A1 tem capacidade 1 e já recebeu BR123; a próxima precisa de outro local.
-  await rejects(db.rpc(portA, 'receive_package', { p_tenant: A, p_idempotency_key: 'rk-a-full', p_unit: unitA, p_tracking: 'FULL1', p_carrier: 'Loggi' }), /lotados/);
+  await rejects(db.rpc(portA, 'receive_package', { p_tenant: A, p_idempotency_key: 'rk-a-full', p_unit: unitA, p_tracking: 'FULL1', p_carrier: 'Loggi', p_courier: 'Entregador Teste' }), /lotados/);
   const [{ n }] = await db.sql(`select count(*)::int n from public.packages p join public.storage_locations s on s.id = p.storage_location_id
     where s.code = 'A1' and p.tenant_id = $1 and p.status in ('RECEBIDA','ARMAZENADA')`, [A]);
   assert.equal(n, 1);
@@ -115,8 +115,8 @@ test('lotação: local cheio não recebe e não há fallback silencioso', async 
 });
 
 test('retry com a mesma chave de idempotência não duplica a encomenda', async () => {
-  const a = await db.rpc(portA, 'receive_package', { p_tenant: A, p_idempotency_key: 'rk-a-idem', p_unit: unitA, p_tracking: 'IDEM1', p_carrier: 'Loggi' });
-  const b = await db.rpc(portA, 'receive_package', { p_tenant: A, p_idempotency_key: 'rk-a-idem', p_unit: unitA, p_tracking: 'IDEM1', p_carrier: 'Loggi' });
+  const a = await db.rpc(portA, 'receive_package', { p_tenant: A, p_idempotency_key: 'rk-a-idem', p_unit: unitA, p_tracking: 'IDEM1', p_carrier: 'Loggi', p_courier: 'Entregador Teste' });
+  const b = await db.rpc(portA, 'receive_package', { p_tenant: A, p_idempotency_key: 'rk-a-idem', p_unit: unitA, p_tracking: 'IDEM1', p_carrier: 'Loggi', p_courier: 'Entregador Teste' });
   assert.equal(a.id, b.id);
   assert.equal(b.replayed, true);
 });
@@ -136,7 +136,7 @@ test('morador vê apenas encomendas da própria unidade e não se promove', asyn
   await rejects(db.as(morA, `update public.tenant_memberships set role = 'admin' where user_id = $1`, [morA]), /permission denied/);
   await rejects(db.as(morA, `insert into public.unit_memberships (tenant_id, unit_id, user_id) values ($1, $2, $3)`, [B, unitB, morA]), /permission denied/);
   await rejects(db.as(morA, `insert into public.platform_admins (user_id) values ($1)`, [morA]), /permission denied/);
-  await rejects(db.rpc(morA, 'receive_package', { p_tenant: A, p_idempotency_key: 'mor-try-01', p_unit: unitA, p_tracking: 'M', p_carrier: 'x' }), /Sem permissão/);
+  await rejects(db.rpc(morA, 'receive_package', { p_tenant: A, p_idempotency_key: 'mor-try-01', p_unit: unitA, p_tracking: 'M', p_carrier: 'x', p_courier: 'Entregador Teste' }), /Sem permissão/);
 });
 
 test('convite: e-mail errado, reutilizado e expirado são recusados', async () => {
@@ -165,7 +165,7 @@ test('revogação vale imediatamente, mesmo com JWT válido', async () => {
 });
 
 test('QR de uso único: retirada concorrente, QR reutilizado/estrangeiro/vazio', async () => {
-  const pkg = await db.rpc(portA, 'receive_package', { p_tenant: A, p_idempotency_key: 'rk-qr-0001', p_unit: unitA, p_tracking: 'QR1', p_carrier: 'Amazon' });
+  const pkg = await db.rpc(portA, 'receive_package', { p_tenant: A, p_idempotency_key: 'rk-qr-0001', p_unit: unitA, p_tracking: 'QR1', p_carrier: 'Amazon', p_courier: 'Entregador Teste' });
   const { token } = await db.rpc(morA, 'issue_pickup_token', { p_tenant: A, p_package: pkg.id });
   assert.match(token, /^PP1\./);
   // Morador de B não emite QR de encomenda de A.
@@ -192,7 +192,7 @@ test('QR de uso único: retirada concorrente, QR reutilizado/estrangeiro/vazio',
 });
 
 test('QR expirado é recusado; manual exige justificativa e assinatura enviada', async () => {
-  const pkg = await db.rpc(portA, 'receive_package', { p_tenant: A, p_idempotency_key: 'rk-qr-0002', p_unit: unitA, p_tracking: 'QR2', p_carrier: 'Amazon' });
+  const pkg = await db.rpc(portA, 'receive_package', { p_tenant: A, p_idempotency_key: 'rk-qr-0002', p_unit: unitA, p_tracking: 'QR2', p_carrier: 'Amazon', p_courier: 'Entregador Teste' });
   const { token } = await db.rpc(morA, 'issue_pickup_token', { p_tenant: A, p_package: pkg.id });
   db.setNow('2026-02-05T15:00:00Z');
   await rejects(db.rpc(portA, 'lookup_pickup_token', { p_tenant: A, p_qr: token }), /expirado/);
@@ -208,7 +208,7 @@ test('QR expirado é recusado; manual exige justificativa e assinatura enviada',
 });
 
 test('ocupação/pendências: exceções não contam como pendentes', async () => {
-  const pkg = await db.rpc(portA, 'receive_package', { p_tenant: A, p_idempotency_key: 'rk-exc-001', p_unit: unitA, p_tracking: 'EXC1', p_carrier: 'Outra' });
+  const pkg = await db.rpc(portA, 'receive_package', { p_tenant: A, p_idempotency_key: 'rk-exc-001', p_unit: unitA, p_tracking: 'EXC1', p_carrier: 'Outra', p_courier: 'Entregador Teste' });
   await rejects(db.rpc(portA, 'resolve_package', { p_tenant: A, p_package: pkg.id, p_status: 'EXTRAVIADA', p_reason: 'sumiu da estante X' }), /Somente o administrador/);
   await db.rpc(portA, 'resolve_package', { p_tenant: A, p_package: pkg.id, p_status: 'DEVOLVIDA', p_reason: 'Endereço incorreto, devolvido' });
   const rows = await db.as(portA, `select * from public.list_packages($1, 'PENDENTES')`, [A]);
@@ -242,11 +242,11 @@ test('cobrança: sem checkout durante o teste; job cria exatamente 1 pedido na e
 });
 
 test('carência e restrição comercial: bloqueia recebimento, mantém retirada', async () => {
-  const pkg = await db.rpc(portA, 'receive_package', { p_tenant: A, p_idempotency_key: 'rk-grace-1', p_unit: unitA, p_tracking: 'GR1', p_carrier: 'Outra' });
+  const pkg = await db.rpc(portA, 'receive_package', { p_tenant: A, p_idempotency_key: 'rk-grace-1', p_unit: unitA, p_tracking: 'GR1', p_carrier: 'Outra', p_courier: 'Entregador Teste' });
   db.setNow('2026-03-08T16:00:00Z'); // fim do teste + 7 dias + 1h
   const [st] = await db.as(adminA, `select app.commercial_state($1) s`, [A]);
   assert.equal(st.s, 'restricted');
-  await rejects(db.rpc(portA, 'receive_package', { p_tenant: A, p_idempotency_key: 'rk-grace-2', p_unit: unitA, p_tracking: 'GR2', p_carrier: 'Outra' }), /Assinatura inativa/);
+  await rejects(db.rpc(portA, 'receive_package', { p_tenant: A, p_idempotency_key: 'rk-grace-2', p_unit: unitA, p_tracking: 'GR2', p_carrier: 'Outra', p_courier: 'Entregador Teste' }), /Assinatura inativa/);
   const done = await db.rpc(portA, 'deliver_package', { p_tenant: A, p_package: pkg.id, p_request: uuid(), p_qr: null,
     p_picked_up_by: 'Morador A', p_recipient_kind: 'morador', ...(await proofs(portA, pkg.id, 'grace001')), p_manual_reason: 'Morador retirou com documento' });
   assert.equal(done.status, 'RETIRADA');

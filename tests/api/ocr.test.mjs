@@ -51,3 +51,18 @@ test('OCR: códigos de triagem não viram unidade/bloco; campos separados e sane
   assert.equal(normalizeLabel({ unit: '12B', block: 'A', confidence: 50 }).unit, '12B');
   assert.equal(normalizeLabel({ unit: '15', confidence: 50 }).unit, '15');
 });
+
+test('OCR: endereço horizontal (quadra/lote, rua/casa) e prefixos de prédio', () => {
+  const pick = (d) => { const r = normalizeLabel({ confidence: 80, ...d }); return [r.block, r.unit]; };
+  assert.deepEqual(pick({ block: 'Quadra B', unit: 'Lote 15' }), ['B', '15']);
+  assert.deepEqual(pick({ unit: 'Qd 3 Lt 15' }), ['3', '15'], 'tudo junto na unidade');
+  assert.deepEqual(pick({ block: 'QD3 LT15' }), ['3', '15'], 'sem espaço');
+  assert.deepEqual(pick({ complement: 'Qd. 7, Lt. 2A' }), ['7', '2A'], 'só no complemento');
+  assert.deepEqual(pick({ block: 'Rua das Palmeiras', unit: 'Casa 12' }), ['Rua das Palmeiras', '12'], 'nome de rua interna fica');
+  assert.deepEqual(pick({ complement: 'Rua das Palmeiras, Casa 12' }), ['Rua das Palmeiras', '12']);
+  assert.deepEqual(pick({ block: 'Bloco A', unit: 'Apto 12B' }), ['A', '12B']);
+  assert.deepEqual(pick({ block: 'Torre 2', unit: 'Ap. 101' }), ['2', '101']);
+  assert.deepEqual(pick({ block: 'A', unit: '101' }), ['A', '101'], 'sem prefixo, igual');
+  assert.deepEqual(pick({ block: 'RJ2-2', unit: 'Casa 4' }), [null, '4'], 'rota continua descartada');
+  assert.deepEqual(pick({ complement: 'Fundos' }), [null, null], 'complemento sem endereço não inventa');
+});

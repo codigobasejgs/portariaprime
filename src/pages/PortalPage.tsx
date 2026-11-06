@@ -7,6 +7,7 @@ import { useSession } from '../lib/session';
 import { applyTheme, publicLogoUrl } from '../lib/theme';
 import { Alert, Button, Field, Input, Select, Spinner } from '../components/ui';
 import { usePwaInstall } from '../hooks/usePwaInstall';
+import { DEFAULT_UNIT_LABELS } from '../lib/format';
 import { BLOCK_PARAM, RELATIONS, blocksOf, Errors, fullName, maskPhone, normEmail, OTHER, phoneE164, SignupForm, UnitOpt, unitsOf, unitValue, validate } from '../lib/resident-signup';
 
 export interface Portal { slug: string; name: string; logo_path: string | null; color_primary: string | null; color_secondary: string | null; color_accent: string | null; status: string }
@@ -120,7 +121,7 @@ export function PortalPage({ slug }: { slug: string }) {
 }
 
 type Term = { version: string; title: string; content: string; hash: string };
-type Units = { has_blocks: boolean; units: UnitOpt[] };
+type Units = { has_blocks: boolean; units: UnitOpt[]; group_label?: string; number_label?: string };
 const EMPTY: SignupForm = { name: '', email: '', phone: '', block: '', unit: '', unitFree: '', relation: '', password: '', password2: '', accepted: false };
 
 /** Formulário completo do morador, em uma etapa. account=true cria a conta (signUp); false = já logado. */
@@ -154,7 +155,10 @@ function ResidentForm({ slug, account, initial, notice, onDone }: {
   if (term === undefined || units === undefined) return <Spinner />;
   const list = units?.units || [];
   const hasBlocks = !!units?.has_blocks;
-  const set = (k: keyof SignupForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+  // Portal público: rótulos vêm de portal_units (sem TenantProvider). Antes da migration: padrão.
+  const groupLabel = units?.group_label?.trim() || DEFAULT_UNIT_LABELS.group;
+  const numberLabel = units?.number_label?.trim() || DEFAULT_UNIT_LABELS.number;
+  const set =(k: keyof SignupForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setF({ ...f, [k]: k === 'phone' ? maskPhone(e.target.value) : e.target.value });
   const here = `/c/${slug}/solicitar`;
   const login = `/entrar?next=${encodeURIComponent(here)}&portal=${slug}`;
@@ -205,21 +209,21 @@ function ResidentForm({ slug, account, initial, notice, onDone }: {
         <Input inputMode="tel" autoComplete="tel-national" value={f.phone} onChange={set('phone')} placeholder="(11) 98888-7777" /></Field>
       {list.length ? (
         <div className={hasBlocks ? 'grid grid-cols-2 gap-3' : ''}>
-          {hasBlocks && <Field label="Bloco / Torre" error={errors.block}>
+          {hasBlocks && <Field label={groupLabel} error={errors.block}>
             <Select value={f.block} onChange={(e) => setF({ ...f, block: e.target.value, unit: '' })}>
               <option value="">Selecione</option>{blocks.map((b) => <option key={b} value={b}>{b}</option>)}
             </Select></Field>}
-          <Field label="Apartamento / Unidade" error={errors.unit}>
+          <Field label={numberLabel} error={errors.unit}>
             <Select value={f.unit} onChange={set('unit')} disabled={hasBlocks && !f.block}>
-              <option value="">{hasBlocks && !f.block ? 'Escolha o bloco' : 'Selecione'}</option>
+              <option value="">{hasBlocks && !f.block ? `Escolha: ${groupLabel.toLocaleLowerCase('pt-BR')}` : 'Selecione'}</option>
               {opts.map((u) => <option key={`${u.block}|${u.label}`} value={u.label}>{u.label}</option>)}
               <option value={OTHER}>Minha unidade não está na lista</option>
             </Select></Field>
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Bloco / Torre (se houver)" error={errors.block}><Input maxLength={30} value={f.block} onChange={set('block')} /></Field>
-          <Field label="Apartamento / Unidade" error={errors.unit}><Input maxLength={30} value={f.unit} onChange={set('unit')} placeholder="101, Casa 3" /></Field>
+          <Field label={`${groupLabel} (se houver)`} error={errors.block}><Input maxLength={30} value={f.block} onChange={set('block')} /></Field>
+          <Field label={numberLabel} error={errors.unit}><Input maxLength={30} value={f.unit} onChange={set('unit')} placeholder="101, Casa 3" /></Field>
         </div>
       )}
       {f.unit === OTHER && <Field label="Informe sua unidade" hint="A administração confere antes de aprovar." error={errors.unitFree}>
