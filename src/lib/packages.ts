@@ -59,11 +59,5 @@ export async function loadStorage(tenantId: string): Promise<StorageLoc[]> {
   return data || [];
 }
 
-/** Busca simples de unidade por texto ("a 101", "casa 12", "101"). */
-export function matchUnits(units: UnitRow[], q: string) {
-  const n = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/bloco|bl\.?|torre|apto?\.?|apartamento/g, ' ').replace(/\s+/g, ' ').trim();
-  const query = n(q);
-  if (!query) return units.filter((u) => u.active).slice(0, 30);
-  const parts = query.split(' ');
-  return units.filter((u) => u.active && parts.every((p) => n(`${u.block || ''} ${u.label}`).includes(p))).slice(0, 30);
-}
+/** Busca simples de unidade por texto (vertical e horizontal). */
+export { matchUnits } from './unit-match';

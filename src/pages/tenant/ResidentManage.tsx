@@ -75,7 +75,7 @@ export function ResidentEditModal({ userId, units, onClose, onDone }: { userId: 
 }
 
 /** Excluir cadastro do morador neste condomínio (a conta pessoal e o histórico ficam). */
-export function ResidentDeleteModal({ member, onClose, onDone }: { member: { user_id: string; full_name?: string | null; email: string }; onClose: () => void; onDone: () => void }) {
+export function ResidentDeleteModal({ member, onClose, onDone }: { member: { user_id: string; full_name?: string | null; email: string; units?: { block?: string | null; label?: string | null }[] }; onClose: () => void; onDone: () => void }) {
   const t = useTenant();
   const [typed, setTyped] = useState('');
   const { busy, run } = useAction();
@@ -86,6 +86,7 @@ export function ResidentDeleteModal({ member, onClose, onDone }: { member: { use
   return (
     <Modal title={`Excluir ${member.full_name || member.email}`} onClose={onClose}>
       <div className="space-y-3 text-sm">
+        <p><strong>{member.full_name || member.email}</strong> · {(member.units || []).map((u) => unitName(u.block, u.label, t.unitLabels)).join(', ') || 'Sem unidade vinculada'}</p>
         <p>Remove o cadastro desta pessoa <strong>neste condomínio</strong>: vínculo com a unidade, contatos, avisos e notificações. Solicitações pendentes, convites e cadastros não concluídos deste condomínio são cancelados.</p>
         <p className="text-muted">Ficam guardados: encomendas, comprovantes de retirada, registros de auditoria e aceites do termo de dados. A conta pessoal (e-mail de login) não é apagada e continua valendo em outros condomínios. Para voltar, a pessoa precisa de novo convite ou nova aprovação.</p>
         <Field label='Digite EXCLUIR para confirmar'><Input value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" /></Field>
@@ -100,6 +101,7 @@ export function ResidentDeleteModal({ member, onClose, onDone }: { member: { use
 
 /** Corrigir solicitação pendente (aprovação e aceite do termo continuam exigidos). */
 export function AccessRequestEditModal({ request, units, onClose, onDone }: { request: any; units: UnitRow[]; onClose: () => void; onDone: () => void }) {
+  const t = useTenant();
   const [f, setF] = useState({ name: request.full_name || '', phone: request.phone || '', block: request.block_text || '', unitText: request.unit_text || '', unit: request.unit_id || '' });
   const { busy, run } = useAction();
   const submit = (e: React.FormEvent) => {
@@ -115,7 +117,7 @@ export function AccessRequestEditModal({ request, units, onClose, onDone }: { re
         <Field label="Nome"><Input required minLength={2} maxLength={120} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
         <Field label="Telefone / WhatsApp" hint={PHONE_HINT}><Input type="tel" inputMode="tel" maxLength={24} value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} /></Field>
         <div className="grid grid-cols-2 gap-2">
-          <Field label="Bloco informado"><Input maxLength={30} value={f.block} onChange={(e) => setF({ ...f, block: e.target.value })} /></Field>
+          <Field label={`${t.unitLabels.group} informado(a)`}><Input maxLength={30} value={f.block} onChange={(e) => setF({ ...f, block: e.target.value })} /></Field>
           <Field label="Unidade informada"><Input required maxLength={30} value={f.unitText} onChange={(e) => setF({ ...f, unitText: e.target.value })} /></Field>
         </div>
         <Field label="Unidade cadastrada" hint="Opcional: vincula a solicitação a uma unidade existente.">
