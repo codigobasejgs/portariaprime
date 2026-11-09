@@ -79,10 +79,9 @@ export function PorterFaceCapture({ onCapture, enrollment = false }: { onCapture
       const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H;
       const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
       const opts = new f.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 });
-      const challenge = crypto.getRandomValues(new Uint8Array(1))[0] % 2 ? 'blink' : 'turn';
       const direction = crypto.getRandomValues(new Uint8Array(1))[0] % 2 ? 1 : -1;
       const need = enrollment ? 5 : 3;
-      let stage = 0, frontal = 0, base = 0, closed = false;
+      let stage = 0, frontal = 0, base = 0;
       const samples: number[][] = [];
       const end = Date.now() + 90000;
       show('search', 'Posicione o rosto dentro do oval.');
@@ -109,16 +108,9 @@ export function PorterFaceCapture({ onCapture, enrollment = false }: { onCapture
           if (++frontal >= 3) { base /= frontal; stage = 1; }
           setProgress(frontal * 8);
         } else if (stage === 1) {
-          // Piscada relativa aos olhos abertos da própria pessoa: limiar fixo falhava em olhos menores.
-          if (challenge === 'blink') {
-            show('ok', 'Agora pisque os olhos devagar.');
-            if (eye < base * 0.72) closed = true;
-            if (closed && eye > base * 0.88) stage = 2;
-          } else {
-            show('ok', `Agora vire devagar o rosto para ${direction === 1 ? 'sua esquerda' : 'sua direita'}.`);
-            if (yaw * direction > 0.18) stage = 2;
-          }
-          if (stage === 2) setProgress(40);
+          // ponytail: só giro de cabeça (lado sorteado). Piscada falhava no celular: quadro lento perde o olho fechado.
+          show('ok', `Agora vire devagar o rosto para ${direction === 1 ? 'sua esquerda' : 'sua direita'}.`);
+          if (yaw * direction > 0.18) { stage = 2; setProgress(40); }
         } else {
           if (Math.abs(yaw) > 0.15 || eye < base * 0.75) { show('adjust', 'Volte ao centro e olhe para a câmera.'); samples.length = 0; continue; }
           const { light, sharp } = quality(ctx, box);

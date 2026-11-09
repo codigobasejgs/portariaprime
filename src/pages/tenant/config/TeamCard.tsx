@@ -27,11 +27,10 @@ export function TeamCard() {
     .catch((e) => setError(e.message)), [t.tenant.id]);
   useEffect(() => { load(); }, [load]);
   if (!t.can('team')) return null;
-  const toggle = (m: any) => {
-    const revoking = m.status === 'active';
+  const toggle = (m: any, revoking = m.status === 'active') => {
     if (revoking && !confirm(`Revogar o acesso de ${m.full_name || m.email}? A pessoa perde o acesso imediatamente, mesmo com o app aberto.`)) return;
     run(async () => { await rpc('set_membership_status', { p_membership: m.membership_id, p_status: revoking ? 'revoked' : 'active' }); await load(); },
-      revoking ? 'Acesso revogado.' : 'Acesso reativado.');
+      revoking ? 'Acesso revogado.' : m.status === 'pending' ? 'Porteiro aprovado. Ele já pode iniciar o turno.' : 'Acesso reativado.');
   };
   return (
     <Card className="space-y-3">
@@ -52,13 +51,16 @@ export function TeamCard() {
                 <span className="min-w-0">
                   <strong>{m.full_name || m.email}</strong>{m.full_name && <span className="text-muted"> · {m.email}</span>}{' '}
                   <Badge tone={m.role === 'admin' ? 'accent' : 'neutral'}>{ROLE[m.role] || m.role}</Badge>{' '}
-                  {m.status !== 'active' && <Badge tone="danger">revogado</Badge>}
+                  {m.status === 'pending' ? <Badge tone="warning">aguardando aprovação</Badge> : m.status !== 'active' && <Badge tone="danger">revogado</Badge>}
                   {local.has(m.user_id) && <Badge tone="neutral">acesso com senha</Badge>}
                   {m.role === 'admin' && m.permissions?.length > 0 && <span className="block text-xs text-muted">Pode: {m.permissions.map((p: string) => PERM[p] || p).join(', ')}</span>}
                 </span>
                 <span className="flex flex-wrap gap-1">
                   {local.has(m.user_id) && m.status === 'active' && <Button variant="ghost" onClick={() => setResetting(m)}>Trocar senha</Button>}
-                  <Button variant="ghost" loading={busy} onClick={() => toggle(m)}>{m.status === 'active' ? 'Revogar acesso' : 'Reativar'}</Button>
+                  {m.status === 'pending' ? <>
+                    <Button loading={busy} onClick={() => toggle(m, false)}>Aprovar</Button>
+                    <Button variant="ghost" loading={busy} onClick={() => toggle(m, true)}>Recusar</Button>
+                  </> : <Button variant="ghost" loading={busy} onClick={() => toggle(m)}>{m.status === 'active' ? 'Revogar acesso' : 'Reativar'}</Button>}
                 </span>
               </li>
             ))}

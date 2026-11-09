@@ -93,6 +93,12 @@ export async function porter(request: Request, action: string) {
       p_descriptor: passwordOk && b.method === 'face' ? b.descriptor : null, p_photo: path, p_method: passwordOk ? b.method : 'password_failed' });
     if (error) rpcError(error);
     recorded = true;
+    if (passwordOk && checked.result === 'invalid') {
+      // Só depois da senha correta: dizer "pendente" não vaza nada para quem não é o titular.
+      const { data: m } = await svc.from('tenant_memberships').select('status').eq('tenant_id', t.id).eq('user_id', identity.user_id).eq('role', 'porteiro').maybeSingle();
+      if (m?.status === 'pending') throw new HttpError(403, 'Cadastro aguardando aprovação do síndico (Configurações > Equipe).');
+    }
+    if (passwordOk && checked.result === 'mismatch') throw new HttpError(403, 'O rosto não conferiu com o do cadastro. Tente de novo em local bem iluminado, de frente para a câmera.');
     if (!passwordOk || !checked.ok || !login.session) throw denied();
     const sessionId = JSON.parse(Buffer.from(login.session.access_token.split('.')[1], 'base64url').toString()).session_id;
     if (typeof sessionId !== 'string') throw denied();
