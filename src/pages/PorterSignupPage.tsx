@@ -61,7 +61,8 @@ export function PorterSignupPage({ slug }: { slug: string }) {
       <h2 className="font-semibold">Referência facial</h2>
       <p className="text-sm text-muted">Esta primeira captura é a referência fixa dos seus logins. Só o síndico pode autorizar uma nova, com registro.</p>
       {face ? <Alert tone="success">Rosto capturado. <button type="button" className="underline" onClick={() => setFace(null)}>Capturar de novo</button></Alert>
-        : <PorterFaceCapture enrollment onCapture={setFace} />}
+        : f.consent ? <PorterFaceCapture enrollment onCapture={setFace} />
+        : <p className="text-sm">Marque a autorização do termo acima para abrir a câmera.</p>}
     </section>
     <Button type="submit" className="w-full" loading={busy} disabled={!face || !f.consent || !pwOk(f.password, f.confirm)}>Concluir cadastro</Button>
   </form>);
