@@ -2,6 +2,7 @@ import { renderReceiptPdf } from '../../api/_lib/receipt-pdf';
 import { TENANT } from './mode';
 import { store, uid } from './store';
 import { myUnits } from './rpc';
+import { COURIER_HANDLERS } from './rpc-couriers';
 
 /** Local stand-in for /api/* on /demonstracao. Unlisted paths fail closed. */
 const MARK = 'DEMONSTRAÇÃO · DADOS FICTÍCIOS';
@@ -15,6 +16,24 @@ export async function demoApi<T = any>(path: string, body: any = {}): Promise<T>
   switch (path) {
     case '/api/ocr/analyze-label':
       if (role === 'morador') fail('Sem permissão.');
+      // CNH fictícia; a foto (opt-in) não sai do navegador na demonstração.
+      if (body.kind === 'cnh') return { kind: 'cnh', full_name: 'Rodrigo Fictício Santos', cpf: '529.982.247-25', cnh_number: '01234567890', category: 'AB', confidence: 93, alerts: [] } as T;
+      if (body.kind === 'cnh-photo-view') {
+        const { path } = COURIER_HANDLERS.courier_photo_reveal({ p_tenant: TENANT, p_courier: body.courierId, p_reason: body.reason });
+        const blob = store.files.get(path) || fail('Foto não encontrada.');
+        return { url: URL.createObjectURL(blob!), expiresIn: 60 } as T;
+      }
+      if (body.kind === 'cnh-photo') {
+        // Mesma ordem do servidor: autoriza, guarda o arquivo, vincula; falha no vínculo descarta o arquivo novo.
+        const { has_photo } = COURIER_HANDLERS.courier_photo_authorize({ p_tenant: TENANT, p_courier: body.courierId });
+        if (has_photo) fail('Foto já guardada para este entregador.');
+        const key = `couriers/${body.courierId}`;
+        const m = /^data:image\/jpeg;base64,(.+)$/.exec(String(body.imageBase64 || '')) || fail('Envie a foto em JPEG.');
+        store.files.set(key, new Blob([Uint8Array.from(atob(m![1]), (ch) => ch.charCodeAt(0))], { type: 'image/jpeg' }));
+        try { COURIER_HANDLERS.courier_attach_photo({ p_tenant: TENANT, p_courier: body.courierId }); }
+        catch (e) { store.files.delete(key); throw e; }
+        return { saved: true } as T;
+      }
       return { carrier: 'Correios', trackingCode: 'DM5550001BR', recipientName: 'João Silva', senderName: 'Loja Exemplo', block: 'A', unit: '101',
         complement: null, orderNumber: null, invoiceNumber: null, evidence: [{ field: 'recipient', text: 'João Silva' }], alerts: [], confidence: 92,
         match: { status: 'matched', unit_id: uid(1), alerts: [] } } as T;

@@ -49,15 +49,23 @@ function Operation() {
   const base = `/c/${t.tenant.slug}`;
   const [d, setD] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const load = useCallback(() => rpc('dashboard_operation', { p_tenant: t.tenant.id }).then((x) => { setD(x); setError(null); }).catch((e) => setError(e.message)), [t.tenant.id]);
+  const [flags, setFlags] = useState<{ rejected_at: string | null; unidentified_reason: string | null }[]>([]);
+  const load = useCallback(() => Promise.all([
+    rpc('dashboard_operation', { p_tenant: t.tenant.id }),
+    rpc<any[]>('staff_package_flags', { p_tenant: t.tenant.id }).catch(() => []),
+  ]).then(([x, f]) => { setD(x); setFlags(f); setError(null); }).catch((e) => setError(e.message)), [t.tenant.id]);
   useEffect(() => { void load(); }, [load]);
   if (error) return <Alert tone="danger">{error} <button className="underline" onClick={load}>Tentar novamente</button></Alert>;
   if (!d) return <Spinner />;
   const a = d.attention;
   const occ = d.occupancy;
   const pct = occ.capacity ? Math.round((occ.used / occ.capacity) * 100) : null;
+  const rejected = flags.filter((f) => f.rejected_at).length;
+  const unidentified = flags.filter((f) => f.unidentified_reason && !f.rejected_at).length;
   // Prioridade: ação que bloqueia pessoas > risco físico > comunicação > administrativo.
   const items: [number, string, string, string][] = ([
+    [rejected, 'Encomendas recusadas pelo morador — devolver', 'Ver na portaria', `${base}/portaria?aba=buscar`],
+    [t.can('approve') ? unidentified : 0, 'Encomendas com morador não identificado', 'Destinar', `${base}/pessoas?aba=nao-identificado`],
     [a.access_requests, 'Solicitações de cadastro aguardando aprovação', 'Revisar', `${base}/pessoas?aba=solicitacoes`],
     [a.stale_packages, `Encomendas aguardando há mais de ${d.stale_hours} h`, 'Ver lista', `${base}/relatorios?status=PENDENTES&antigas=1`],
     [a.near_capacity, 'Locais de guarda com 85% ou mais de ocupação', 'Ver locais', `${base}/configuracoes?m=operacao`],
@@ -80,7 +88,7 @@ function Operation() {
         {items.length === 0 ? <p className="text-sm text-muted">Nada pendente agora.</p> : (
           <ul className="divide-y divide-line">
             {items.map(([c, label, cta, href]) => (
-              <li key={label} className="py-2 flex items-center justify-between gap-3 text-sm">
+              <li key={label} className={`py-2 flex items-center justify-between gap-3 text-sm ${label.startsWith('Encomendas recusadas') ? 'text-danger font-semibold border-l-4 border-danger bg-danger-bg pl-3 rounded-r-lg' : ''}`}>
                 <span><strong className="tabular-nums">{n(c)}</strong> · {label}</span>
                 <a href={href} onClick={onLink} className="shrink-0 underline min-h-10 inline-flex items-center">{cta}</a>
               </li>

@@ -106,9 +106,18 @@ test('WhatsApp: sem HTML, marcadores do nome neutralizados, tamanho controlado',
   assert.ok(!m.whatsapp.includes('~Ana~'));
 });
 
+test('recusa pelo morador: push discreto para a equipe, sem unidade/nome/PIN, link da portaria do próprio condomínio', () => {
+  const ctx = { ...A, package: { carrier: 'Correios', unit: 'A 101', tracking_code: 'BR123', picked_up_by: 'X', protocol: 'P1' } };
+  const m = render('package_rejected', ctx, { pin: '1234' }, APP);
+  const all = JSON.stringify(m);
+  for (const s of ['A 101', 'Ana', 'Correios', 'BR123', '1234', 'P1']) assert.ok(!all.includes(s), `sem ${s}`);
+  assert.ok(m.push?.title && m.push.body);
+  assert.equal(m.push.url, `${APP}/c/aurora/portaria?aba=buscar`);
+});
+
 test('todo evento que o banco enfileira tem template (sem "Evento sem template")', () => {
   const events = ['package_received', 'package_reminder', 'package_picked_up', 'portal_welcome', 'access_request', 'access_received', 'access_decision',
-    'ops_alert', 'trial_reminder', 'billing_order', 'billing_paid', 'support_reply', 'quote_sent', 'contract_copy'];
+    'ops_alert', 'trial_reminder', 'billing_order', 'billing_paid', 'support_reply', 'quote_sent', 'contract_copy', 'package_rejected', 'resident_invite'];
   const payload = { approved: true, amount_cents: 1000, cycle: 'monthly', plan_name: 'Prime', trial_ends_at: '2026-12-01T00:00:00Z', period_end: '2026-12-01T00:00:00Z',
     kind: 'trial_d7', token: 't', protocol: 'P', valid_until: '2026-12-01T00:00:00Z' };
   for (const e of events) {

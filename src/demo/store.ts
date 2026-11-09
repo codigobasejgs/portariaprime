@@ -13,7 +13,17 @@ export interface Pkg {
   id: string; ref: string; status: string; carrier: string; tracking_code: string | null; recipient_name: string | null; notes: string | null;
   unit_id: string | null; received_at: string; stored_at: string | null; notified_at: string | null; picked_up_at: string | null; picked_up_by_name: string | null;
   pickup_method: string | null; delivered_by: string | null; resolution_reason: string | null; resolved_at: string | null;
-  storage_location_id: string | null; courier_name: string | null; received_by_name: string | null; registered_via: string; idempotency_key?: string; request_id?: string;
+  storage_location_id: string | null; courier_name: string | null; received_by_name: string | null; registered_via: string; idempotency_key?: string; request_id?: string; courier_id?: string | null;
+  unidentified_reason?: string | null; rejected_at?: string | null; rejected_by?: string | null; rejection_reason?: string | null; rejection_note?: string | null;
+}
+/** Entregador cadastrado pela leitura da CNH (dados fictícios; CPF inventado que só passa no DV). */
+export interface DemoCourier {
+  id: string; full_name: string; document_number: string | null; cnh_number: string | null; cnh_category: string | null; carrier_default: string | null;
+  has_photo: boolean; created_at: string; last_visit_at: string | null;
+}
+export interface Keyword {
+  id: string; unit_id: string; created_by: string; keyword: string; carrier: string | null; recipient_name: string | null; note: string | null;
+  valid_until: string | null; expires_at: string | null; status: 'active' | 'used' | 'cancelled'; used_at: string | null; used_by?: string | null; created_at: string;
 }
 export interface Receipt { tenant_id: string; package_id: string; protocol: string; issued_at: string; pdf_status: 'ready'; verify_code: null; snapshot: Record<string, any> }
 export interface AccessRequest {
@@ -24,6 +34,7 @@ export interface Invitation { id: string; email: string; role: 'morador'; unit_i
 export interface Notice { id: string; user_id: string; kind: string; title: string; body: string; package_id: string | null; read_at: string | null; created_at: string }
 export interface Contact { id: string; user_id: string; unit_id: string; name: string; phone: string | null; email: string | null; notify_whatsapp: boolean; notify_email: boolean; active: boolean }
 export interface Token { token: string; package_id: string; expires_at: string; used_at: string | null }
+export interface ImportEntry { id: string; unit_id: string; full_name: string; kind: string | null; phone: string | null; email: string | null; extra: any; status: string; channel: string | null; invited_at: string | null }
 export interface Attachment { package_id: string; kind: 'label_photo'; object_path: string; position: number; created_at: string }
 
 const ADMIN = uid(10), PORTEIRO = uid(11), MORADOR = uid(20);
@@ -31,7 +42,9 @@ const STAFF = 'José Santos';
 
 function seed() {
   const units: Unit[] = [['A', '101'], ['A', '102'], ['A', '201'], ['A', '202'], ['B', '101'], ['B', '102'], ['B', '201'], ['B', '202']]
-    .map(([block, label], i) => ({ id: uid(i + 1), tenant_id: TENANT, block, label, active: true }));
+    .map(([block, label], i) => ({ id: uid(i + 1), tenant_id: TENANT, block, label, active: true }))
+    // Bloco C sem moradores: alvo do convite na planilha de exemplo.
+    .concat([['C', '301'], ['C', '302']].map(([block, label], i) => ({ id: uid(60 + i), tenant_id: TENANT, block, label, active: true })));
   // 12 residents in the 8 units; resident profile = João Silva (A-101).
   const people: [string, number, string][] = [
     ['João Silva', 1, 'proprietario'], ['Ana Silva', 1, 'conjuge'], ['Marina Costa', 2, 'locatario'], ['Rafael Lima', 3, 'proprietario'],
@@ -94,8 +107,12 @@ function seed() {
     notify_email: true, notify_whatsapp: false, notify_push: true, qr_ttl_hours: 48, max_residents_per_unit: 6,
     reminder_enabled: true, reminder_after_hours: 24, reminder_interval_hours: 24, reminder_max: 3, reminder_start_hour: 8, reminder_end_hour: 20,
   };
+  const MARCOS = uid(300);
+  for (const p of pkgs) if (p.courier_name === 'Marcos (Correios)') p.courier_id = MARCOS;
+  const courierRows: DemoCourier[] = [{ id: MARCOS, full_name: 'Marcos Pereira', document_number: '11144477735', cnh_number: '98765432100', cnh_category: 'AB',
+    carrier_default: 'Correios', has_photo: false, created_at: ago(24 * 60), last_visit_at: ago(3) }];
   return { units, users, memberships, contacts, packages: pkgs, receipts, requests, invitations, notifications, settings,
-    tokens: [] as Token[], attachments: [] as Attachment[], seq: 1100, protoSeq: 1 };
+    tokens: [] as Token[], attachments: [] as Attachment[], keywords: [] as Keyword[], couriers: courierRows, seq: 1100, protoSeq: 1, imports: [] as ImportEntry[] };
 }
 
 /** Immutable snapshot, same fields the real receipt row carries. */

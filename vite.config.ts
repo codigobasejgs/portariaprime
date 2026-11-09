@@ -24,7 +24,7 @@ export default defineConfig({
       ],
     },
     // Capturas da landing ficam fora do precache (peso); o navegador as cacheia por HTTP.
-    injectManifest: { globPatterns: ['**/*.{js,css,html,png,ico,webmanifest}'], globIgnores: ['screens/**'] },
+    injectManifest: { globPatterns: ['**/*.{js,css,html,png,ico,webmanifest}'], globIgnores: ['screens/**', 'models/**'] },
   })],
   // NEXT_PUBLIC_* = nomes criados pela integração Supabase da Vercel (somente chaves públicas).
   envPrefix: ['VITE_', 'NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'NEXT_PUBLIC_SUPABASE_ANON_KEY'],

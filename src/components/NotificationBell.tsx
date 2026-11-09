@@ -12,6 +12,7 @@ export interface Notif { id: string; kind: string; title: string; body: string; 
 /** Destino de cada aviso (sempre dentro do condomínio; a página revalida o acesso). */
 export function notifTarget(base: string, n: Notif) {
   if (n.kind === 'access_request') return `${base}/pessoas?aba=solicitacoes`;
+  if (n.kind === 'package_rejected') return `${base}/portaria?aba=buscar`;
   if (n.kind === 'ops_alert') return `${base}/configuracoes?m=integracoes`;
   if (n.kind === 'trial_reminder') return `${base}/configuracoes?m=plano`;
   if (n.kind === 'package_picked_up' && n.package_id) return `${base}/comprovante?p=${n.package_id}`;

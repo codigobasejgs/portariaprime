@@ -34,6 +34,7 @@ const Comprovante = lazy(() => import('./pages/tenant/Receipt').then(m => ({ def
 const Avisos = lazy(() => import('./pages/tenant/MoradorPage').then(m => ({ default: m.AvisosPage })));
 const Painel = lazy(() => import('./pages/tenant/PainelPage').then(m => ({ default: m.PainelPage })));
 const Relatorios = lazy(() => import('./pages/tenant/RelatoriosPage').then(m => ({ default: m.RelatoriosPage })));
+const Entregadores = lazy(() => import('./pages/tenant/EntregadoresPage').then(m => ({ default: m.EntregadoresPage })));
 const Pessoas = lazy(() => import('./pages/tenant/PessoasPage').then(m => ({ default: m.PessoasPage })));
 const Config = lazy(() => import('./pages/tenant/ConfigPage').then(m => ({ default: m.ConfigPage })));
 const Retorno = lazy(() => import('./pages/tenant/AssinaturaPage').then(m => ({ default: m.CheckoutReturnPage })));
@@ -54,6 +55,9 @@ const Validar = lazy(() => import('./pages/ValidarPage'));
 const Planos = lazy(() => import('./pages/PlanosPage'));
 const Portal = lazy(() => import('./pages/PortalPage').then(m => ({ default: m.PortalPage })));
 const RequestAccess = lazy(() => import('./pages/PortalPage').then(m => ({ default: m.RequestAccessPage })));
+const PorterSignup = lazy(() => import('./pages/PorterSignupPage').then(m => ({ default: m.PorterSignupPage })));
+const PorterLogin = lazy(() => import('./pages/PorterLoginPage').then(m => ({ default: m.PorterLoginPage })));
+const PorterAudit = lazy(() => import('./pages/tenant/PorterAuditPage').then(m => ({ default: m.PorterAuditPage })));
 
 const RESIDENT_AREAS = new Set(['inicio', 'historico', 'notificacoes', 'conta', 'encomenda', 'comprovante', 'morador', 'avisos']);
 
@@ -86,6 +90,10 @@ function Routes() {
   if (path === '/proposta') return <Proposal />;
   if (path === '/validar') return <Validar />;
   if (path === '/planos') return <Planos />;
+  const porterSignupMatch = path.match(/^\/c\/([a-z0-9-]+)\/equipe\/cadastro\/?$/);
+  if (porterSignupMatch) return <PorterSignup slug={porterSignupMatch[1]} />;
+  const porterLoginMatch = path.match(/^\/c\/([a-z0-9-]+)\/equipe\/entrar\/?$/);
+  if (porterLoginMatch) return <PorterLogin slug={porterLoginMatch[1]} />;
   if (configError) return <main className="max-w-lg mx-auto p-6"><PortariaPrimeLogo /><Alert tone="danger">{configError}</Alert></main>;
   // /totem: equipe logada vai ao totem da equipe (OCR, entrega); sem login segue o totem público pareado.
   if (route?.area === 'totem') {
@@ -157,6 +165,8 @@ function Routes() {
     if (route.area === 'totem-equipe' && staff) page = <Portaria totem />;
     if (route.area === 'painel' && admin) page = <Painel />;
     if (route.area === 'relatorios' && admin) page = <Relatorios />;
+    if (route.area === 'auditoria-portaria' && perm('team')) page = <PorterAudit />;
+    if (route.area === 'entregadores' && admin) page = <Entregadores />;
     if (route.area === 'pessoas' && admin) page = <Pessoas tab={query('aba')} />;
     // Cada módulo valida a própria permissão (settings/team/billing).
     if (route.area === 'configuracoes' && (perm('settings') || perm('team') || perm('billing'))) page = <Config section={query('m')} />;

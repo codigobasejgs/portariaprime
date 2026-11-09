@@ -97,6 +97,15 @@ async function run(request: Request) {
   const { data: mdm, error: me } = await svc.rpc('mdm_retention');
   report.mdm_retention = me ? { error: me.message } : mdm;
 
+  // Fotos faciais da portaria: login > 90 dias e referências de vínculos encerrados. Fila só sai após remoção confirmada.
+  const { data: faces, error: fe } = await svc.rpc('porter_retention');
+  if (fe) report.porter_retention = { error: fe.message };
+  else if (faces?.length) {
+    const { error: re2 } = await svc.storage.from('tenant-private').remove(faces);
+    const { error: de } = re2 ? { error: re2 } : await svc.rpc('porter_photo_deleted', { p_paths: faces });
+    report.porter_retention = re2 || de ? { error: (re2 || de)!.message } : { removed: faces.length };
+  } else report.porter_retention = { removed: 0 };
+
   report.receipts = await processReceipts(svc, base);
 
   const { data: jobs, error: je } = await svc.rpc('claim_notification_jobs', { p_limit: 50 });
@@ -142,7 +151,7 @@ async function run(request: Request) {
         res = await sendEmail(job.recipient, m.subject, emailHtml(ctx, m), pdf || undefined, own ? ctx?.tenant_name : null,
           { text: emailText(ctx, m), idempotencyKey: `job-${job.id}` });
       } else if (job.channel === 'whatsapp' && (job.event === 'portal_welcome'
-        || ((job.event === 'access_received' || job.event === 'access_decision') && !(ctx.whatsapp?.enabled && ctx.whatsapp.instance)))) {
+        || ((job.event === 'access_received' || job.event === 'access_decision' || job.event === 'resident_invite') && !(ctx.whatsapp?.enabled && ctx.whatsapp.instance)))) {
         // Sem WhatsApp do condomínio (recém-criado ou não conectado): canal central da plataforma, se configurado.
         // Nunca simula envio: sem canal, o job fica "disabled" com o motivo.
         const platform = optionalEnv('PLATFORM_WHATSAPP_INSTANCE');

@@ -8,7 +8,7 @@ import { Alert, Button, Field, Input, Modal, Select, Spinner } from '../../compo
 import { PackagePhotos } from '../../components/PhotoGallery';
 import { Notif, useNotifications } from '../../components/NotificationBell';
 import { useResident } from './ResidentShell';
-import { ExceptionNote, HistoryItem, pkgTitle, QrSheet, ReceiptActions, ResidentPackage, StatusBadge, WAITING, WaitingCard } from './parts';
+import { ExceptionNote, HistoryItem, KeywordCard, pkgTitle, QrSheet, ReceiptActions, RejectButton, RejectedNote, ResidentPackage, StatusBadge, WAITING, WaitingCard } from './parts';
 
 interface Home {
   name: string | null; waiting: ResidentPackage[]; recent: ResidentPackage[]; unread: number;
@@ -53,7 +53,7 @@ export function InicioPage() {
 
       {n > 0 ? (
         <ul className="space-y-3" aria-label="Encomendas para retirar">
-          {d.waiting.map((p) => <WaitingCard key={p.id} p={p} multiUnit={r.units.length > 1 && !r.unit} onQr={() => setQr(p)} />)}
+          {d.waiting.map((p) => <WaitingCard key={p.id} p={p} multiUnit={r.units.length > 1 && !r.unit} onQr={() => setQr(p)} onChange={load} />)}
         </ul>
       ) : (
         <div className="rounded-2xl border border-line bg-surface p-4 flex gap-3 items-start">
@@ -72,6 +72,8 @@ export function InicioPage() {
         </a>
       )}
 
+      <KeywordCard units={r.units} unit={r.unit} />
+
       <section className="space-y-2" data-tour="morador-historico">
         <div className="flex items-center justify-between"><h2 className="font-semibold">Recentes</h2><a href={`${r.base}/historico`} onClick={onLink} className="text-sm underline min-h-11 inline-flex items-center">Ver histórico</a></div>
         {d.recent.length === 0 ? <p className="text-sm text-muted">Encomendas retiradas aparecem aqui com o comprovante.</p>
@@ -82,7 +84,7 @@ export function InicioPage() {
   );
 }
 
-const EVENT_LABEL: Record<string, string> = { received: 'Chegou na portaria', stored: 'Guardada pela portaria', picked_up: 'Retirada', devolvida: 'Devolvida ao remetente', cancelada: 'Registro cancelado', extraviada: 'Registrada como extraviada' };
+const EVENT_LABEL: Record<string, string> = { rejected_by_resident: 'Recusada pelo morador', received: 'Chegou na portaria', stored: 'Guardada pela portaria', picked_up: 'Retirada', devolvida: 'Devolvida ao remetente', cancelada: 'Registro cancelado', extraviada: 'Registrada como extraviada' };
 
 /** Detalhe: resumo, ação principal, linha do tempo real e comprovante. Acesso revalidado no servidor. */
 export function EncomendaPage() {
@@ -125,7 +127,11 @@ export function EncomendaPage() {
           {p.courier_name && <><dt className="text-muted">Entregador</dt><dd className="break-words">{p.courier_name}</dd></>}
           {p.picked_up_by_name && <><dt className="text-muted">Retirada por</dt><dd>{p.picked_up_by_name}</dd></>}
         </dl>
-        {waiting && <Button onClick={() => setQr(true)} className="w-full sm:w-auto">Mostrar QR de retirada</Button>}
+        <RejectedNote p={p} />
+        <div className="flex flex-col sm:flex-row gap-2">
+          {waiting && !p.rejected_at && <Button onClick={() => setQr(true)} className="w-full sm:w-auto">Mostrar QR de retirada</Button>}
+          <RejectButton p={p} onDone={load} />
+        </div>
         <ExceptionNote status={p.status} />
         {p.status === 'RETIRADA' && <ReceiptActions p={p} />}
         <PackagePhotos key={p.id} packageId={p.id} />

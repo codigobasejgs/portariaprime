@@ -17,6 +17,7 @@ const routes = {
   '/api/team/create': '../api/invitations/[action].ts',
   '/api/team/password': '../api/invitations/[action].ts',
   '/api/team/resident-reset': '../api/invitations/[action].ts',
+  ...Object.fromEntries(['preview', 'signup', 'login', 'photo'].map(op => [`/api/team/porter-${op}`, '../api/invitations/[action].ts'])),
   '/api/ocr/analyze-label': '../api/ocr/analyze-label.ts',
   '/api/contact': '../api/public/[action].ts',
   '/api/funnel': '../api/public/[action].ts',

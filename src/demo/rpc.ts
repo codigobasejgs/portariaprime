@@ -2,6 +2,9 @@ import { TENANT } from './mode';
 import { CONCIERGE, STORAGE, nowIso, receiptFor, store, type Pkg } from './store';
 import { ADMIN_HANDLERS } from './rpc-admin';
 import { DASH_HANDLERS } from './rpc-dash';
+import { PORTARIA_HANDLERS } from './rpc-portaria';
+import { COURIER_HANDLERS } from './rpc-couriers';
+import { IMPORT_HANDLERS } from './rpc-import';
 
 /** Same RPC names and parameter names the pages send to Supabase; data from the local store. */
 export type Handler = (a: Record<string, any>) => any;
@@ -23,6 +26,7 @@ export function pkgRow(p: Pkg) {
     unit_id: p.unit_id, unit_block: u?.block ?? null, unit_label: u?.label ?? null, storage_location_id: p.storage_location_id, storage_code: l?.code ?? null,
     received_at: p.received_at, stored_at: p.stored_at, notified_at: p.notified_at, picked_up_at: p.picked_up_at, picked_up_by_name: p.picked_up_by_name,
     pickup_method: p.pickup_method, resolution_reason: p.resolution_reason, courier_name: p.courier_name, received_by_name: p.received_by_name,
+    unidentified_reason: p.unidentified_reason ?? null, rejected_at: p.rejected_at ?? null, rejection_reason: p.rejection_reason ?? null, rejection_note: p.rejection_note ?? null,
   };
 }
 const byRecent = (a: Pkg, b: Pkg) => b.received_at.localeCompare(a.received_at) || b.id.localeCompare(a.id);
@@ -143,6 +147,7 @@ const CORE: Record<string, Handler> = {
     tenant(a);
     const p = mine(a.p_package);
     if (!WAITING.includes(p.status)) fail('Esta encomenda não está disponível para retirada.');
+    if (p.rejected_at) fail('Encomenda recusada pelo morador: não está disponível para retirada.');
     const t = { token: `PPDEMO.${crypto.randomUUID()}`, package_id: p.id, expires_at: new Date(Date.now() + 48 * 3600_000).toISOString(), used_at: null };
     store.s.tokens.push(t); store.save();
     return { token: t.token, expires_at: t.expires_at };
@@ -153,6 +158,7 @@ const CORE: Record<string, Handler> = {
     if (!t || t.used_at || t.expires_at < nowIso()) fail('QR inválido, vencido ou já usado.');
     const p = store.pkg(t!.package_id);
     if (!p || !WAITING.includes(p.status)) fail('Esta encomenda não está mais aguardando retirada.');
+    if (p!.rejected_at) fail('Encomenda recusada pelo morador: devolva pela portaria.');
     const l = loc(p!.storage_location_id);
     return { ...pkgRow(p!), storage_rack: l?.rack ?? null, storage_shelf: l?.shelf ?? null, concierge_name: CONCIERGE[0].name,
       label_photo_path: store.s.attachments.find((x) => x.package_id === p!.id)?.object_path ?? null };
@@ -212,4 +218,4 @@ const CORE: Record<string, Handler> = {
   },
 };
 
-export const HANDLERS: Record<string, Handler> = { ...CORE, ...ADMIN_HANDLERS, ...DASH_HANDLERS };
+export const HANDLERS: Record<string, Handler> = { ...CORE, ...ADMIN_HANDLERS, ...DASH_HANDLERS, ...PORTARIA_HANDLERS, ...COURIER_HANDLERS, ...IMPORT_HANDLERS };

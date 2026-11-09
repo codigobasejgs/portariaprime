@@ -4,6 +4,7 @@ import { api, rpc } from '../../../lib/api';
 import { useTenant } from '../../../lib/tenant';
 import { Alert, Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, toast, useAction } from '../../../components/ui';
 import { useSensitive } from '../../../components/Reauth';
+import { PorterLinkModal } from './PorterLinkModal';
 
 const ROLE: Record<string, string> = { admin: 'Administrador', porteiro: 'Porteiro' };
 const PERM: Record<string, string> = { team: 'equipe', approve: 'aprova moradores', settings: 'configurações', billing: 'pagamentos' };
@@ -15,6 +16,7 @@ export function TeamCard() {
   const [error, setError] = useState<string | null>(null);
   const [inviting, setInviting] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [porterLink, setPorterLink] = useState(false);
   const [resetting, setResetting] = useState<any>(null);
   const [local, setLocal] = useState<Set<string>>(new Set());
   const { busy, run } = useAction();
@@ -36,7 +38,8 @@ export function TeamCard() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="font-semibold">Pessoas da equipe</p>
         <div className="flex flex-wrap gap-2">
-          <Button onClick={() => setCreating(true)}>Criar acesso com senha</Button>
+          <Button onClick={() => setPorterLink(true)}>Link/QR de porteiro</Button>
+          <Button variant="secondary" onClick={() => setCreating(true)}>Criar acesso com senha</Button>
           <Button variant="secondary" onClick={() => setInviting(true)} data-tour="config-equipe">Convidar por e-mail</Button>
         </div>
       </div>
@@ -63,6 +66,7 @@ export function TeamCard() {
         )}
       {inviting && <InviteTeamModal onClose={() => setInviting(false)} onDone={() => { setInviting(false); load(); }} />}
       {creating && <CreateAccessModal onClose={() => setCreating(false)} onDone={() => { setCreating(false); load(); }} />}
+      {porterLink && <PorterLinkModal onClose={() => setPorterLink(false)} />}
       {resetting && <ResetPasswordModal member={resetting} onClose={() => setResetting(null)} />}
     </Card>
   );

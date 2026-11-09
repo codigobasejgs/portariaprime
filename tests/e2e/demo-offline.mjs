@@ -74,6 +74,7 @@ await step('portaria registra encomenda com etiqueta de exemplo (OCR 92)', async
   await page.goto(`${C}/portaria?perfil=porteiro`);
   await page.getByRole('button', { name: 'Usar etiqueta de exemplo' }).click();
   await page.getByText('Sugestão preenchida').waitFor({ timeout: 15000 });
+  await page.getByRole('dialog', { name: 'Confira a leitura da etiqueta' }).getByRole('button', { name: /Confirmar/ }).click();
   check((await page.getByText('Selecionada:').innerText()).includes('101'), 'OCR não selecionou A 101');
   await page.getByLabel('Nome do entregador (obrigatório)').fill('Marcos (Correios)');
   check((await page.getByLabel('Recebido por (porteiro, obrigatório)').inputValue()).length >= 2, 'porteiro não preenchido');
@@ -163,10 +164,68 @@ await step('síndico exclui morador', async () => {
   await page.getByRole('button', { name: 'Ações de Paulo Nogueira' }).waitFor({ state: 'detached', timeout: 10000 });
 });
 
+await step('portaria acha entregador recorrente pelo nome (CPF só com prefixo)', async () => {
+  await page.goto(`${C}/portaria?perfil=porteiro`);
+  await page.getByLabel('Nome do entregador (obrigatório)').fill('marcos per');
+  const opt = page.getByRole('listbox', { name: 'Entregadores cadastrados' }).getByRole('option').first();
+  await opt.waitFor({ timeout: 10000 });
+  const txt = await opt.innerText();
+  check(txt.includes('Marcos Pereira') && txt.includes('111.***.***-**') && !txt.includes('444'), `sugestão inesperada: ${txt}`);
+  await opt.click();
+  await page.getByText('Entregador cadastrado').waitFor();
+  check((await page.getByLabel('Nome do entregador (obrigatório)').inputValue()) === 'Marcos Pereira - Correios', 'nome não preenchido pela sugestão');
+});
+
+await step('portaria lê CNH de exemplo, revisa, confirma e registra a encomenda vinculada', async () => {
+  await page.goto(`${C}/portaria?perfil=porteiro`);
+  await page.getByRole('button', { name: 'Simular CNH de exemplo' }).click();
+  await page.getByText('Dados da CNH (revise)').waitFor({ timeout: 15000 });
+  check((await page.getByLabel('CPF', { exact: true }).inputValue()) === '529.982.247-25', 'CPF da leitura não apareceu para revisão');
+  check(!(await page.getByLabel(/Guardar foto do documento/).isChecked()), 'foto do documento marcada por padrão');
+  await page.getByRole('button', { name: 'Confirmar entregador' }).click();
+  await page.getByText('Entregador cadastrado').waitFor({ timeout: 10000 });
+  check((await page.getByLabel('Nome do entregador (obrigatório)').inputValue()).startsWith('Rodrigo Fictício Santos'), 'nome do entregador não preenchido');
+  await page.getByPlaceholder('Buscar unidade').fill('A 102');
+  await page.getByRole('listbox', { name: 'Unidades encontradas' }).getByRole('option').first().click();
+  await page.getByText('Guardei fisicamente em').click();
+  await page.getByRole('button', { name: 'Registrar encomenda' }).click();
+  await toast('Encomenda registrada para');
+});
+
+await step('síndico vê entregador mascarado, revela com motivo e lista as entregas', async () => {
+  await page.goto(`${C}/entregadores?perfil=admin`);
+  const card = page.locator('li', { hasText: 'Rodrigo Fictício Santos' });
+  await card.waitFor({ timeout: 15000 });
+  check((await card.innerText()).includes('***.982.247-**'), 'documento não mascarado na lista');
+  check(!(await card.innerText()).includes('529.982'), 'documento completo exposto sem revelar');
+  await card.getByRole('button', { name: 'Revelar documento' }).click();
+  await card.getByText('529.982.247-25').waitFor({ timeout: 10000 });
+  await card.getByRole('button', { name: 'Ver entregas', exact: true }).click();
+  const modal = page.getByRole('dialog', { name: 'Entregas de Rodrigo Fictício Santos' });
+  await modal.waitFor({ timeout: 10000 });
+  await modal.getByText(/102/).first().waitFor({ timeout: 10000 });
+  check((await modal.innerText()).includes('José Santos'), 'porteiro ausente na entrega');
+});
+
+await step('síndico importa planilha de exemplo e convida só unidades sem cadastro', async () => {
+  await page.goto(`${C}/pessoas?perfil=admin&aba=importados`);
+  await page.getByRole('button', { name: 'Usar planilha de exemplo' }).click();
+  await page.getByText('linha(s) descartada(s)').waitFor({ timeout: 15000 });
+  await page.getByRole('button', { name: /^Salvar pré-cadastro \(5\)$/ }).click();
+  await toast('Pré-cadastro salvo: 5 novos');
+  await page.getByRole('button', { name: 'Ver prévia do envio' }).click();
+  const modal = page.getByRole('dialog', { name: 'Confirmar envio dos convites' });
+  await modal.waitFor({ timeout: 10000 });
+  // A-102, B-201 e B-202 têm morador (fora); C-302 sem WhatsApp; só C-301 sai.
+  await modal.getByText('Unidade já tem cadastro: 3').waitFor();
+  await modal.getByRole('button', { name: 'Enviar 1 convite(s)' }).click();
+  await toast('1 convite(s) na fila');
+});
+
 for (const [w, h] of [[360, 740], [768, 1024], [1280, 900]]) {
   await step(`barra e página sem scroll horizontal em ${w}px`, async () => {
     await page.setViewportSize({ width: w, height: h });
-    for (const path of ['painel?perfil=admin', 'portaria?perfil=porteiro', 'inicio?perfil=morador']) {
+    for (const path of ['painel?perfil=admin', 'portaria?perfil=porteiro', 'inicio?perfil=morador', 'entregadores?perfil=admin']) {
       await page.goto(`${C}/${path}`);
       const bar = page.getByRole('region', { name: 'Demonstração' });
       await bar.waitFor({ timeout: 15000 });
@@ -186,6 +245,102 @@ await step('nenhum service worker nem push registrado', async () => {
   check(swRequests.length === 0, `sw solicitado: ${swRequests.join(', ')}`);
   const push = await page.evaluate(async () => ({ perm: typeof Notification === 'undefined' ? 'n/a' : Notification.permission, regs: (await navigator.serviceWorker?.getRegistrations?.())?.length ?? 0 }));
   check(push.regs === 0, 'registro de SW encontrado');
+});
+
+// --- Melhorias da portaria (OCR, não identificado, recusa, palavra-chave, busca combinada) ---
+await step('OCR: pop-up de confirmação; “Alterar” leva ao campo da unidade', async () => {
+  await page.goto(`${C}/portaria?perfil=porteiro`);
+  await page.getByRole('button', { name: 'Usar etiqueta de exemplo' }).click();
+  const dlg = page.getByRole('dialog', { name: 'Confira a leitura da etiqueta' });
+  await dlg.waitFor({ timeout: 15000 });
+  await dlg.getByText(/Morador vinculado na unidade/).waitFor();
+  await dlg.getByRole('button', { name: /Alterar/ }).click();
+  await dlg.waitFor({ state: 'detached', timeout: 5000 });
+  await page.waitForFunction(() => document.activeElement?.getAttribute('placeholder') === 'Buscar unidade', null, { timeout: 5000 });
+});
+
+await step('portaria marca “Morador não identificado” e síndico destina', async () => {
+  await page.getByText('Morador não identificado', { exact: true }).click();
+  await page.getByLabel('Nome do entregador (obrigatório)').fill('Lia - Mercado Livre');
+  await page.getByText('Guardei fisicamente em').click();
+  await page.getByRole('button', { name: 'Registrar encomenda' }).click();
+  await toast('Encomenda registrada para');
+  await page.goto(`${C}/pessoas?perfil=admin&aba=nao-identificado`);
+  await page.getByRole('tab', { name: /Morador não identificado \(1\)/ }).waitFor({ timeout: 15000 });
+  const list = page.getByRole('list', { name: 'Encomendas com morador não identificado' });
+  await list.getByText('Morador não cadastrado na unidade').waitFor();
+  await list.getByRole('button', { name: 'Corrigir / Destinar' }).first().click();
+  const modal = page.getByRole('dialog', { name: 'Corrigir / Destinar encomenda' });
+  await modal.getByLabel('Morador').selectOption({ label: 'João Silva' });
+  await modal.getByRole('button', { name: 'Salvar destino' }).click();
+  await toast('Encomenda destinada.');
+  await page.getByText('Nenhuma encomenda com morador não identificado').waitFor({ timeout: 10000 });
+});
+
+await step('morador recusa encomenda; portaria vê em destaque e QR deixa de valer', async () => {
+  await page.goto(`${C}/encomenda?perfil=morador&p=00000000-0000-4000-8000-000000000101`);
+  await page.getByRole('button', { name: '🚫 Recusar encomenda' }).click();
+  const modal = page.getByRole('dialog', { name: 'Recusar encomenda' });
+  check(await modal.getByRole('button', { name: 'Confirmar recusa' }).isDisabled(), 'recusa sem motivo habilitada');
+  await modal.getByRole('radio').last().check(); // "outro" exige descrição
+  check(await modal.getByRole('button', { name: 'Confirmar recusa' }).isDisabled(), '"outro" sem descrição habilitado');
+  await modal.getByLabel('Descreva o motivo').fill('Não comprei isso');
+  await modal.getByRole('button', { name: 'Confirmar recusa' }).click();
+  await page.getByText(/Você recusou esta encomenda/).waitFor({ timeout: 10000 });
+  check(await page.getByRole('button', { name: 'Mostrar QR de retirada' }).count() === 0, 'QR ainda oferecido após recusa');
+  await page.goto(`${C}/portaria?perfil=porteiro&aba=buscar`);
+  await page.getByText(/Recusada pelo morador: outro motivo — Não comprei isso/).waitFor({ timeout: 15000 });
+  await page.getByRole('button', { name: 'Devolver' }).first().waitFor();
+});
+
+await step('palavra-chave: morador informa, portaria vê no recebimento e marca como utilizada', async () => {
+  await page.goto(`${C}/inicio?perfil=morador`);
+  await page.getByRole('button', { name: '🔑 Informar palavra-chave de entrega' }).click();
+  const modal = page.getByRole('dialog', { name: 'Informar palavra-chave de entrega' });
+  await modal.getByLabel('Palavra-chave').fill('GIRASSOL 42');
+  await modal.getByRole('button', { name: 'Salvar palavra-chave' }).click();
+  await page.getByRole('region', { name: 'Palavra-chave de entrega' }).getByText('GIRASSOL 42').waitFor({ timeout: 10000 });
+  await page.goto(`${C}/portaria?perfil=porteiro`);
+  await page.getByPlaceholder('Buscar unidade').fill('A 101');
+  await page.getByRole('option', { name: 'Bloco A · 101' }).click();
+  await page.getByRole('status', { name: 'Palavra-chave da unidade' }).getByText('GIRASSOL 42').waitFor({ timeout: 10000 });
+  const card = page.getByRole('region', { name: 'Palavras-chave dos moradores' });
+  await card.getByText('GIRASSOL 42').waitFor();
+  await card.getByRole('button', { name: 'Marcar como utilizada' }).click();
+  await toast('Palavra-chave marcada como utilizada.');
+  await card.waitFor({ state: 'detached', timeout: 10000 });
+});
+
+await step('busca combinada de unidade/morador em Pessoas (formatos, bloco, acento, situação)', async () => {
+  await page.goto(`${C}/pessoas?perfil=admin&aba=unidades`);
+  const q = page.getByLabel('Buscar unidade');
+  await q.waitFor({ timeout: 15000 });
+  const a101 = page.getByRole('button', { name: 'Abrir Bloco A · 101' }), b101 = page.getByRole('button', { name: 'Abrir Bloco B · 101' });
+  for (const s of ['A-101', 'A 101', 'BLOCO A, N 101', 'a/101']) {
+    await q.fill(s);
+    await a101.waitFor({ timeout: 5000 });
+    await b101.waitFor({ state: 'detached', timeout: 5000 });
+  }
+  await q.fill('patricia');
+  await page.getByRole('button', { name: 'Abrir Bloco B · 202' }).waitFor({ timeout: 5000 });
+  await a101.waitFor({ state: 'detached', timeout: 5000 });
+  await q.fill('');
+  await page.getByLabel('Filtrar por bloco').fill('B');
+  await b101.waitFor({ timeout: 5000 });
+  await a101.waitFor({ state: 'detached', timeout: 5000 });
+  await page.getByLabel('Filtrar por bloco').fill('');
+  await page.getByLabel('Filtrar por situação').selectOption({ label: 'Importado/Convite pendente' });
+  await page.getByRole('button', { name: 'Abrir Bloco A · 202' }).click();
+  const panel = page.getByRole('dialog', { name: 'Unidade Bloco A · 202' });
+  await panel.getByRole('button', { name: 'Reenviar convite' }).waitFor({ timeout: 5000 });
+  await panel.getByRole('button', { name: 'Revogar convite' }).waitFor();
+  await page.keyboard.press('Escape');
+  await page.getByLabel('Filtrar por situação').selectOption({ label: 'Todos' });
+  await page.getByRole('button', { name: 'Abrir Bloco A · 102' }).click();
+  const p2 = page.getByRole('dialog', { name: 'Unidade Bloco A · 102' });
+  await p2.getByText('Gustavo Pereira').waitFor({ timeout: 5000 });
+  await p2.getByRole('button', { name: 'Editar' }).first().waitFor();
+  await p2.getByRole('button', { name: 'Excluir' }).first().waitFor();
 });
 await page.close();
 await ctx.close();

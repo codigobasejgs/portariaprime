@@ -43,6 +43,11 @@ export function render(event: string, ctx: MessageCtx, payload: any, appUrl: str
   const receiptLink = p.id ? `${appUrl}/c/${encodeURIComponent(ctx.tenant_slug)}/comprovante?p=${encodeURIComponent(p.id)}` : home;
   const billingLink = `${appUrl}/c/${encodeURIComponent(ctx.tenant_slug)}/assinatura`;
   switch (event) {
+    case 'package_rejected': {
+      const url = `${appUrl}/c/${encodeURIComponent(ctx.tenant_slug)}/portaria?aba=buscar`;
+      return { subject: 'Pendência na portaria', intro: 'Há uma encomenda recusada. Consulte a portaria para devolver.', lines: [],
+        push: { title: 'Pendência na portaria', body: 'Há uma encomenda recusada. Abra o painel da equipe.', url }, cta: ['Abrir portaria', url] };
+    }
     case 'package_received':
       return {
         subject: `Encomenda na portaria — ${ctx.tenant_name}`,
@@ -133,6 +138,20 @@ Equipe Portaria Prime`,
         intro: `Olá, ${name}. Sua solicitação de cadastro no ${ctx.tenant_name} não foi aprovada. Se houver algum dado incorreto (por exemplo, bloco ou unidade), você pode enviar o cadastro novamente pelo portal. Para esclarecimentos, procure a administração ou a portaria do condomínio.`,
         whatsapp: `Olá, ${wa(name)}.\n\nSua solicitação de cadastro no *${wa(ctx.tenant_name)}* não foi aprovada.\n\nSe algum dado estiver incorreto, envie o cadastro novamente pelo portal: ${portal}\n\nDúvidas: procure a administração do condomínio.`,
         lines: [['Motivo informado', r.reason]], cta: ['Abrir o portal', portal],
+      };
+    }
+    case 'resident_invite': {
+      // Convite do pré-cadastro: só primeiro nome e unidade; o token abre o cadastro já preenchido (aprovação continua).
+      const r = ctx.resident || {};
+      const url = `${appUrl}/c/${encodeURIComponent(ctx.tenant_slug)}?invite=${encodeURIComponent(String(payload?.token || ''))}`;
+      const name = r.name || 'morador(a)';
+      return {
+        subject: `Convite para o aplicativo do ${ctx.tenant_name}`,
+        intro: `Olá, ${name}. O ${ctx.tenant_name} agora avisa sobre encomendas pelo aplicativo. Confirme seus dados, crie sua senha e envie o cadastro: a administração aprova em seguida. O link é pessoal e vale por 30 dias.`,
+        whatsapp: `Olá, ${wa(name)}!\n\nO *${wa(ctx.tenant_name)}* agora avisa sobre encomendas pelo aplicativo.\n\n`
+          + (r.unit ? `Unidade: ${wa(r.unit)}\n\n` : '')
+          + `Confirme seus dados e crie sua senha (link pessoal, vale 30 dias):\n${url}\n\nApós o envio, a administração aprova o cadastro.`,
+        lines: [['Condomínio', ctx.tenant_name], ['Unidade', r.unit]], cta: ['Confirmar meu cadastro', url],
       };
     }
     case 'ops_alert':

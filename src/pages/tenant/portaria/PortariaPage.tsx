@@ -26,10 +26,13 @@ export function PortariaPage({ totem = false }: { totem?: boolean }) {
   const [move, setMove] = useState<PackageRow | null>(null);
   const [resolve, setResolve] = useState<PackageRow | null>(null);
   const [search, setSearch] = useState('');
+  const [flags, setFlags] = useState<Record<string, PackageFlag>>({});
 
   const refresh = useCallback(async () => {
     try {
       setPending(await listPackages(t.tenant.id, { status: 'PENDENTES', limit: 300 }));
+      const f = await rpc<PackageFlag[]>('staff_package_flags', { p_tenant: t.tenant.id }).catch(() => []);
+      setFlags(Object.fromEntries(f.map((x) => [x.id, x])));
     } catch (e: any) {
       setError(e.message);
     }
@@ -46,7 +49,9 @@ export function PortariaPage({ totem = false }: { totem?: boolean }) {
   const pre = (pending || []).filter((p) => p.status === 'PRE_REGISTRADA');
   const waiting = (pending || []).filter((p) => p.status !== 'PRE_REGISTRADA');
   const q = search.trim().toLowerCase();
-  const filtered = q ? waiting.filter((p) => `${p.unit_block || ''} ${p.unit_label || ''} ${p.tracking_code || ''} ${p.recipient_name || ''}`.toLowerCase().includes(q)) : waiting;
+  // Recusadas pelo morador primeiro (precisam de devolução).
+  const filtered = (q ? waiting.filter((p) => `${p.unit_block || ''} ${p.unit_label || ''} ${p.tracking_code || ''} ${p.recipient_name || ''}`.toLowerCase().includes(q)) : waiting)
+    .slice().sort((a, b) => Number(!!flags[b.id]?.rejected_at) - Number(!!flags[a.id]?.rejected_at));
 
   const tabs: [Tab, string, React.ElementType][] = totem
     ? [['receber', 'Registrar encomenda', PackagePlus], ['entregar', 'Entregar ao morador', PackageCheck]]
@@ -101,10 +106,12 @@ export function PortariaPage({ totem = false }: { totem?: boolean }) {
           </div>
           {!pending ? <Spinner /> : filtered.length === 0 ? <Empty title="Nada aguardando retirada" /> : (
             <ul className="divide-y divide-line">
-              {filtered.map((p) => (
-                <li key={p.id} className="py-3 flex flex-wrap items-center justify-between gap-2">
+              {filtered.map((p) => { const f = flags[p.id]; return (
+                <li key={p.id} className={`py-3 flex flex-wrap items-center justify-between gap-2 ${f?.rejected_at ? 'border-l-4 border-danger bg-danger-bg pl-3 -ml-1 rounded-r-lg' : ''}`}>
                   <div className="min-w-0">
-                    <p className="font-medium">{unitName(p.unit_block, p.unit_label, t.unitLabels)} <span className="text-muted font-normal">· {p.carrier}</span></p>
+                    <p className="font-medium">{unitName(p.unit_block, p.unit_label, t.unitLabels)} <span className="text-muted font-normal">· {p.carrier}</span>
+                      {f?.unidentified_reason && <> <Badge tone="warning">Morador não identificado</Badge></>}</p>
+                    {f?.rejected_at && <p className="text-sm font-semibold text-danger">🚫 Recusada pelo morador: {REJECTION_TEXT[f.rejection_reason || 'other']}{f.rejection_note ? ` — ${f.rejection_note}` : ''}. Devolva pela “Exceção”.</p>}
                     <p className="text-xs text-muted">{p.tracking_code || 'sem rastreio'} · {dateTime(p.received_at, t.tenant.timezone)}{p.storage_code ? ` · ${p.storage_code}` : ''}{p.notified_at ? ' · avisado' : ''}</p>
                     {(p.courier_name || p.received_by_name) && <p className="text-xs text-muted">
                       {p.received_by_name && <>Recebido por {p.received_by_name}</>}{p.courier_name && <>{p.received_by_name ? ' · ' : ''}Entregador: {p.courier_name}</>}
@@ -112,16 +119,17 @@ export function PortariaPage({ totem = false }: { totem?: boolean }) {
                   </div>
                   <div className="flex gap-2">
                     {storage.length > 0 && <Button variant="ghost" onClick={() => setMove(p)} aria-label="Mover"><ArrowRightLeft className="w-4 h-4" /></Button>}
-                    <Button variant="ghost" onClick={() => setResolve(p)}>Exceção</Button>
-                    <Button variant="secondary" onClick={() => setPickup({ pkg: p, qr: null })}>Entregar sem QR</Button>
+                    <Button variant={f?.rejected_at ? 'danger' : 'ghost'} onClick={() => setResolve(p)}>{f?.rejected_at ? 'Devolver' : 'Exceção'}</Button>
+                    {!f?.rejected_at && <Button variant="secondary" onClick={() => setPickup({ pkg: p, qr: null })}>Entregar sem QR</Button>}
                   </div>
                 </li>
-              ))}
+              ); })}
             </ul>
           )}
         </Card>
       )}
 
+      {tab !== 'entregar' && <KeywordsCard />}
       {tab === 'buscar' && <HistorySearch onReceipt={setReceipt} />}
 
       {pickup && <PickupModal pkg={pickup.pkg} qr={pickup.qr} onClose={() => setPickup(null)} onDone={(_, id) => { setPickup(null); refresh(); setReceipt(id); }} />}
@@ -132,8 +140,47 @@ export function PortariaPage({ totem = false }: { totem?: boolean }) {
         </Modal>
       )}
       {move && <MoveModal pkg={move} storage={storage} onClose={() => setMove(null)} onDone={() => { setMove(null); refresh(); }} />}
-      {resolve && <ResolveModal pkg={resolve} onClose={() => setResolve(null)} onDone={() => { setResolve(null); refresh(); }} />}
+      {resolve && <ResolveModal pkg={resolve} initialReason={flags[resolve.id]?.rejected_at ? `Recusada pelo morador: ${REJECTION_TEXT[flags[resolve.id].rejection_reason || 'other']}${flags[resolve.id].rejection_note ? ` — ${flags[resolve.id].rejection_note}` : ''}`.slice(0, 300) : ''}
+        onClose={() => setResolve(null)} onDone={() => { setResolve(null); refresh(); }} />}
     </div>
+  );
+}
+
+interface PackageFlag { id: string; rejected_at: string | null; rejection_reason: string | null; rejection_note: string | null; unidentified_reason: string | null }
+export const REJECTION_TEXT: Record<string, string> = { wrong_unit: 'não é desta unidade', cancelled: 'compra cancelada', other: 'outro motivo' };
+interface KeywordRow { id: string; keyword: string; carrier: string | null; recipient_name: string | null; note: string | null; valid_until: string | null; expires_at: string | null;
+  unit_block: string | null; unit_label: string; created_by_name: string | null }
+
+/** Palavras-chave ativas informadas pelos moradores (RLS/RPC: só equipe do condomínio e a própria unidade). */
+function KeywordsCard() {
+  const t = useTenant();
+  const [rows, setRows] = useState<KeywordRow[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const load = useCallback(() => rpc<KeywordRow[]>('list_delivery_keywords', { p_tenant: t.tenant.id }).then(setRows).catch(() => setRows([])), [t.tenant.id]);
+  useEffect(() => { load(); }, [load]);
+  const use = async (k: KeywordRow) => {
+    setBusy(k.id);
+    try { await rpc('delivery_keyword_mark_used', { p_tenant: t.tenant.id, p_id: k.id }); toast.success('Palavra-chave marcada como utilizada.'); load(); }
+    catch (e: any) { toast.error(e.message); } finally { setBusy(null); }
+  };
+  if (!rows || rows.length === 0) return null;
+  return (
+    <Card className="space-y-2" role="region" aria-label="Palavras-chave dos moradores">
+      <p className="font-semibold">🔑 Palavras-chave dos moradores ({rows.length})</p>
+      <ul className="divide-y divide-line">
+        {rows.map((k) => (
+          <li key={k.id} className="py-2 flex flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0 text-sm">
+              <p><strong>{unitName(k.unit_block, k.unit_label, t.unitLabels)}</strong>{k.created_by_name ? ` · ${k.created_by_name}` : ''}{k.carrier ? ` · ${k.carrier}` : ''}</p>
+              <p className="text-xl font-bold tracking-wide text-secondary">{k.keyword}</p>
+              {(k.recipient_name || k.note || k.valid_until || k.expires_at) && <p className="text-xs text-muted">{[k.recipient_name && `Para ${k.recipient_name}`, k.note,
+                k.expires_at ? `até ${dateTime(k.expires_at, t.tenant.timezone)}` : k.valid_until && `até ${k.valid_until.split('-').reverse().join('/')}`].filter(Boolean).join(' · ')}</p>}
+            </div>
+            <Button variant="secondary" loading={busy === k.id} onClick={() => use(k)}>Marcar como utilizada</Button>
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 }
 
@@ -190,10 +237,10 @@ function MoveModal({ pkg, storage, onClose, onDone }: { pkg: PackageRow; storage
   );
 }
 
-function ResolveModal({ pkg, onClose, onDone }: { pkg: PackageRow; onClose: () => void; onDone: () => void }) {
+function ResolveModal({ pkg, initialReason = '', onClose, onDone }: { pkg: PackageRow; initialReason?: string; onClose: () => void; onDone: () => void }) {
   const t = useTenant();
   const [status, setStatus] = useState('DEVOLVIDA');
-  const [reason, setReason] = useState('');
+  const [reason, setReason] = useState(initialReason);
   const [busy, setBusy] = useState(false);
   const go = async () => {
     setBusy(true);

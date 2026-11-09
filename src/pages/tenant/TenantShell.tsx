@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { LifeBuoy, BarChart3, Building2, ChevronsLeft, ChevronsRight, CircleUser, HelpCircle, LayoutDashboard, LogOut, Menu, Package, Settings, Shield, Smartphone, Users, X } from 'lucide-react';
+import { LifeBuoy, BarChart3, Building2, ChevronsLeft, ChevronsRight, CircleUser, HelpCircle, LayoutDashboard, LogOut, Menu, Package, Settings, Shield, Smartphone, Truck, UserCheck, Users, X } from 'lucide-react';
 import { useSession } from '../../lib/session';
 import { useRealtime, useRefreshWhileVisible, useTenant } from '../../lib/tenant';
 import { supabase } from '../../lib/supabase';
@@ -7,6 +7,7 @@ import { navigate, onLink } from '../../lib/router';
 import { publicLogoUrl } from '../../lib/theme';
 import { Alert } from '../../components/ui';
 import { NotificationBell } from '../../components/NotificationBell';
+import { ShiftCountdown } from '../../components/ShiftCountdown';
 import { useTour } from '../../components/TourGuide';
 import { articleFor } from '../../lib/help';
 import { loadProgress, saveProgress, toursFor } from '../../lib/tours';
@@ -26,7 +27,8 @@ function usePendingAccess(tenantId: string, enabled: boolean) {
 }
 
 const TITLES: Record<string, string> = {
-  painel: 'Visão geral', portaria: 'Encomendas', 'totem-equipe': 'Totem da portaria', pessoas: 'Unidades e moradores', relatorios: 'Relatórios',
+  painel: 'Visão geral', portaria: 'Encomendas', 'totem-equipe': 'Totem da portaria', pessoas: 'Unidades e moradores', relatorios: 'Relatórios', entregadores: 'Entregadores',
+  'auditoria-portaria': 'Auditoria da portaria',
   configuracoes: 'Configurações', assinatura: 'Plano e assinatura', suporte: 'Suporte', ajuda: 'Ajuda', morador: 'Minhas encomendas', avisos: 'Notificações',
   aplicativo: 'Meu aplicativo e notificações', comprovante: 'Comprovante',
 };
@@ -106,6 +108,8 @@ export function TenantShell({ area, children }: { area: string; children: React.
     { area: 'portaria', label: 'Encomendas', icon: Package, show: t.isStaff, match: ['portaria', 'totem-equipe'] },
     { area: 'pessoas', label: 'Unidades e moradores', icon: Users, show: t.can('approve') || admin, badge: pending },
     { area: 'relatorios', label: 'Relatórios', icon: BarChart3, show: admin },
+    { area: 'entregadores', label: 'Entregadores', icon: Truck, show: admin },
+    { area: 'auditoria-portaria', label: 'Auditoria da portaria', icon: UserCheck, show: t.can('team') },
   ];
   const bottom: NavItem[] = [
     { area: 'configuracoes', label: 'Configurações', icon: Settings, show: t.can('settings') || t.can('billing') || t.can('team'), match: ['configuracoes', 'assinatura'] },
@@ -171,6 +175,7 @@ export function TenantShell({ area, children }: { area: string; children: React.
         <header className="sticky top-0 z-30 flex items-center gap-1 border-b border-line bg-surface px-2 sm:px-4 min-h-14 pt-[env(safe-area-inset-top)]">
           <button ref={menuBtn} onClick={() => setOpen(true)} aria-label="Abrir menu" className="lg:hidden min-h-11 min-w-11 grid place-items-center"><Menu /></button>
           <p className="font-semibold truncate flex-1 px-1">{TITLES[area] || name}</p>
+          <ShiftCountdown />
           <NotificationBell />
           <AccountMenu base={base} />
         </header>

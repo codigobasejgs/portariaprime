@@ -9,11 +9,22 @@ import { blobToDataUrl } from '../../../lib/files';
 import { setCaptureBusy } from '../../../lib/capture';
 import { CARRIERS, unitName } from '../../../lib/format';
 import { loadAvailability, locationName, matchUnits, StorageLoc, UnitRow } from '../../../lib/packages';
-import { Alert, Button, Card, Field, Input, Select, toast } from '../../../components/ui';
+import { Alert, Badge, Button, Card, Field, Input, Modal, Select, toast } from '../../../components/ui';
 import { GalleryPhoto, PhotoGallery, preparePhoto, uploadGallery } from '../../../components/PhotoGallery';
 import { DemoLabelSample } from '../../../demo/samples';
+import { CourierPicker } from './CourierPicker';
 
-interface Match { status: 'matched' | 'unit_only' | 'conflict' | 'ambiguous' | 'name_only' | 'not_found'; unit_id: string | null; alerts: string[] }
+interface Match {
+  status: 'matched' | 'unit_only' | 'conflict' | 'ambiguous' | 'name_only' | 'not_found'; unit_id: string | null; alerts: string[];
+  people?: { unit_id: string; name: string; score: number }[];
+}
+export const UNIDENTIFIED_REASONS = {
+  unregistered_resident: 'Morador não cadastrado na unidade',
+  incomplete_or_unknown_name: 'Nome incompleto ou desconhecido',
+} as const;
+export type UnidentifiedReason = keyof typeof UNIDENTIFIED_REASONS;
+const PERSON_STATUS: Record<string, string> = { active: 'ativo', pending: 'pendente', revoked: 'revogado' };
+interface Keyword { id: string; keyword: string; carrier: string | null; recipient_name: string | null }
 interface Ocr {
   carrier: string; trackingCode: string | null; recipientName: string | null; senderName: string | null; block: string | null; unit: string | null;
   complement: string | null; orderNumber: string | null; invoiceNumber: string | null; evidence: { field: string; text: string }[]; alerts: string[];
@@ -47,6 +58,7 @@ export function ReceiveForm({ units, storage, onDone, preregistered }: {
   const labels = useUnitLabels();
   const { session } = useSession();
   const [courier, setCourier] = useState(preregistered?.courier_name || '');
+  const [courierId, setCourierId] = useState<string | null>(null);
   const [receiver, setReceiver] = useState('');
   const receiverEdited = useRef(false);
   useEffect(() => {
@@ -79,7 +91,12 @@ export function ReceiveForm({ units, storage, onDone, preregistered }: {
   const savedPackage = useRef<any>(null);
   const submitting = useRef(false);
   const trackingRef = useRef<HTMLInputElement>(null);
+  const unitRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const [ocrConfirm, setOcrConfirm] = useState(false);
+  const [unidentified, setUnidentified] = useState<UnidentifiedReason | ''>('');
+  const [residents, setResidents] = useState<{ name: string; status: string }[] | null>(null);
+  const [keywords, setKeywords] = useState<Keyword[]>([]);
 
   useEffect(() => {
     if (photos.length > 0) {
@@ -99,6 +116,21 @@ export function ReceiveForm({ units, storage, onDone, preregistered }: {
   const candidates = useMemo(() => matchUnits(units, unitQuery), [units, unitQuery]);
   const unit = units.find((u) => u.id === unitId);
   const ocrEnabled = !!t.overview?.entitlements?.feature_ocr;
+
+  // Unidade escolhida: moradores (nome + situação, sem contato) e palavras-chave ativas.
+  useEffect(() => {
+    setResidents(null); setKeywords([]);
+    if (!unitId) return;
+    let live = true;
+    rpc<{ name: string; status: string }[]>('unit_residents_for_staff', { p_tenant: t.tenant.id, p_unit: unitId })
+      .then((r) => live && setResidents(r)).catch(() => live && setResidents(null));
+    rpc<Keyword[]>('list_delivery_keywords', { p_tenant: t.tenant.id, p_unit: unitId })
+      .then((r) => live && setKeywords(r)).catch(() => live && setKeywords([]));
+    return () => { live = false; };
+  }, [unitId, t.tenant.id]);
+
+  // "Alterar": fecha e leva ao campo da unidade (depois do Modal devolver o foco ao elemento anterior).
+  const editOcr = () => { setOcrConfirm(false); setTimeout(() => { unitRef.current?.focus(); unitRef.current?.select(); }, 0); };
 
   // A primeira foto é a etiqueta: identifica a foto (dedupe no servidor) e alimenta o OCR.
   const firstId = photos[0]?.id;
@@ -127,6 +159,7 @@ export function ReceiveForm({ units, storage, onDone, preregistered }: {
         setUnitId(null); setUnitQuery([r.block, r.unit].filter(Boolean).join(' '));
       }
       setOcrMsg(r.confidence < 70 ? 'Leitura com baixa confiança: confira todos os campos com atenção.' : 'Sugestão preenchida. Confira antes de salvar.');
+      setOcrConfirm(true);
     } catch (e: any) {
       setOcrMsg(e.message);
     } finally {
@@ -156,7 +189,11 @@ export function ReceiveForm({ units, storage, onDone, preregistered }: {
           p_courier: courier.trim(), p_received_by_name: receiver.trim(),
         }));
       savedPackage.current = pkg;
+      // Vínculo com o entregador cadastrado (opcional): o nome já foi gravado; falha aqui não desfaz o recebimento.
+      if (courierId) await rpc('package_set_courier', { p_tenant: t.tenant.id, p_package: pkg.id, p_courier: courierId }).catch(() => {});
       setSaved(true);
+      // Chamada separada e idempotente (receive_and_store mantém a assinatura usada por totens/clientes antigos).
+      if (unidentified) await rpc('package_mark_unidentified', { p_tenant: t.tenant.id, p_package: pkg.id, p_reason: unidentified });
       // Fotos: cada uma falha/repete sozinha; a encomenda nunca é duplicada.
       if (photos.length && !(await uploadGallery(t.tenant.id, pkg.id, photos, updatePhoto))) {
         setError('Encomenda já registrada; alguma foto não foi enviada. Toque em “Registrar” (ou “Reenviar fotos com falha”) para reenviar só as fotos, sem duplicar a encomenda.');
@@ -170,7 +207,7 @@ export function ReceiveForm({ units, storage, onDone, preregistered }: {
       savedPackage.current = null;
       photos.forEach((p) => URL.revokeObjectURL(p.url));
       setPhotos([]); setSaved(false); setOcr(null); setOcrMsg(null); setStored(false);
-      setTracking(''); setRecipient(''); setNotes(''); setCourier('');
+      setTracking(''); setRecipient(''); setNotes(''); setCourier(''); setUnidentified(''); setCourierId(null);
       if (!preregistered) refreshAvail();
       // Registro rápido mantém unidade, transportadora e local; a guarda é confirmada de novo a cada item.
       if (!batch) {
@@ -188,6 +225,7 @@ export function ReceiveForm({ units, storage, onDone, preregistered }: {
   };
 
   return (
+    <>
     <form ref={formRef} onSubmit={submit} className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:items-start">
       <Card className="space-y-3" data-tour="receber-foto">
         <p className="font-semibold">1. Fotos <span className="text-muted font-normal">(opcional, até 8 — a primeira é a etiqueta)</span></p>
@@ -230,8 +268,42 @@ export function ReceiveForm({ units, storage, onDone, preregistered }: {
         </div>
         {batch && <p className="text-xs text-muted">Unidade, transportadora e local ficam para o próximo item. Destinatário e confirmação da guarda são exigidos em cada encomenda.</p>}
         <div data-tour="receber-unidade"><Field label="Unidade de destino" hint={unit ? `Selecionada: ${unitName(unit.block, unit.label, labels)}` : `Digite ${labels.group.toLowerCase()} e ${labels.number.toLowerCase()}, ex.: "A 101", "Quadra B Lote 15" ou "Rua 3 Casa 12".`}>
-          <Input value={unitQuery} onChange={(e) => { setUnitQuery(e.target.value); setUnitId(null); }} placeholder="Buscar unidade" autoComplete="off" />
+          <Input ref={unitRef} value={unitQuery} onChange={(e) => { setUnitQuery(e.target.value); setUnitId(null); }} placeholder="Buscar unidade" autoComplete="off" />
         </Field></div>
+        {unitId && keywords.length > 0 && (
+          <div className="rounded-xl border-2 border-secondary p-3 text-sm" role="status" aria-label="Palavra-chave da unidade">
+            <Badge tone="accent">🔑 Unidade com palavra-chave de entrega</Badge>
+            <ul className="mt-2 space-y-1">{keywords.map((k) => (
+              <li key={k.id}><strong className="text-base tracking-wide">{k.keyword}</strong>{k.carrier ? ` · ${k.carrier}` : ''}{k.recipient_name ? ` · ${k.recipient_name}` : ''}</li>
+            ))}</ul>
+            <p className="text-xs text-muted mt-1">Peça a palavra ao entregador antes de receber. Marque como utilizada em “Palavras-chave dos moradores”.</p>
+          </div>
+        )}
+        {unitId && residents && (
+          <div className="text-sm" aria-label="Moradores da unidade">
+            <p className="text-muted text-xs mb-1">Moradores desta unidade:</p>
+            {residents.length === 0 ? <p className="text-warning">Nenhum morador cadastrado nesta unidade.</p> : (
+              <ul className="flex flex-wrap gap-2">{residents.map((r, i) => (
+                <li key={i} className="rounded-lg border border-line px-2 py-1">{r.name} <Badge tone={r.status === 'active' ? 'success' : r.status === 'pending' ? 'warning' : 'neutral'}>{PERSON_STATUS[r.status] || r.status}</Badge></li>
+              ))}</ul>
+            )}
+          </div>
+        )}
+        {!preregistered && (
+          <div className="rounded-xl border border-line p-3 space-y-2">
+            <label className="flex items-center gap-2 text-sm min-h-11">
+              <input type="checkbox" checked={!!unidentified} onChange={(e) => setUnidentified(e.target.checked ? 'unregistered_resident' : '')} />
+              Morador não identificado
+            </label>
+            {unidentified && (
+              <Field label="Motivo" hint="A encomenda fica guardada normalmente e o síndico é avisado para destinar.">
+                <Select value={unidentified} onChange={(e) => setUnidentified(e.target.value as UnidentifiedReason)}>
+                  {Object.entries(UNIDENTIFIED_REASONS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </Select>
+              </Field>
+            )}
+          </div>
+        )}
         {!unitId && unitQuery && (
           <div className="flex flex-wrap gap-2" role="listbox" aria-label="Unidades encontradas">
             {candidates.length === 0 && <p className="text-sm text-muted">Nenhuma unidade encontrada.</p>}
@@ -250,9 +322,7 @@ export function ReceiveForm({ units, storage, onDone, preregistered }: {
           </Field>
         </div>
         <div className="grid sm:grid-cols-2 gap-4">
-          <Field label="Nome do entregador (obrigatório)" hint="Ex.: João - Mercado Livre">
-            <Input value={courier} onChange={(e) => setCourier(e.target.value)} required minLength={2} maxLength={80} autoComplete="off" />
-          </Field>
+          <CourierPicker value={courier} onChange={setCourier} courierId={courierId} onSelect={setCourierId} carrier={carrier} ocrEnabled={ocrEnabled} />
           <Field label="Recebido por (porteiro, obrigatório)" hint="Preenchido com quem está logado. Altere se o terminal for compartilhado.">
             <Input value={receiver} onChange={(e) => { receiverEdited.current = true; setReceiver(e.target.value); }} required minLength={2} maxLength={120} autoComplete="name" />
           </Field>
@@ -294,5 +364,39 @@ export function ReceiveForm({ units, storage, onDone, preregistered }: {
         )}
       </Card>
     </form>
+    {ocrConfirm && ocr && <OcrConfirm ocr={ocr} unit={unit} labels={labels} onConfirm={() => setOcrConfirm(false)} onEdit={editOcr} />}
+    </>
+  );
+}
+
+/** Confirmação da leitura: texto grande e alto contraste. Esc / “Alterar” levam ao campo da unidade. */
+function OcrConfirm({ ocr, unit, labels, onConfirm, onEdit }: {
+  ocr: Ocr; unit: UnitRow | undefined; labels: ReturnType<typeof useUnitLabels>; onConfirm: () => void; onEdit: () => void;
+}) {
+  const linked = ocr.match?.status === 'matched' || ocr.match?.status === 'name_only'
+    ? ocr.match.people?.find((p) => p.unit_id === ocr.match!.unit_id)?.name || ocr.recipientName : null;
+  const row = (k: string, v: string | null | undefined) => (
+    <div className="flex flex-wrap items-baseline justify-between gap-x-4 border-b border-line py-2">
+      <dt className="text-base text-muted">{k}</dt>
+      <dd className="text-2xl font-bold text-text break-all">{v || '—'}</dd>
+    </div>
+  );
+  return (
+    <Modal title="Confira a leitura da etiqueta" onClose={onEdit}>
+      <div className="space-y-4">
+        <dl aria-label="Dados lidos">
+          {row(labels.group, unit?.block ?? ocr.block)}
+          {row(labels.number, unit?.label ?? ocr.unit)}
+          {row('Destinatário lido', ocr.recipientName)}
+        </dl>
+        {linked
+          ? <p className="rounded-xl border-2 border-success p-3 text-lg font-semibold text-success">✔ Morador vinculado na unidade: {linked}</p>
+          : <p className="rounded-xl border-2 border-warning bg-warning-bg p-3 text-lg font-semibold text-warning" role="alert">⚠ Morador não identificado na unidade. Confira antes de registrar.</p>}
+        <div className="grid grid-cols-2 gap-3">
+          <Button type="button" className="min-h-14 text-lg" onClick={onConfirm}>✅ Confirmar</Button>
+          <Button type="button" variant="secondary" className="min-h-14 text-lg" onClick={onEdit}>✏️ Alterar</Button>
+        </div>
+      </div>
+    </Modal>
   );
 }

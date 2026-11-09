@@ -33,6 +33,6 @@ export const isKioskApp = () => isKiosk() || (typeof navigator !== 'undefined' &
 
 /** Login da equipe no quiosque, voltando para a área de operação pedida (nunca área do morador). */
 export function kioskLogin(slug: string, area = '') {
-  const staff = /^(portaria|totem-equipe|painel|relatorios|pessoas|configuracoes|avisos|ajuda|comprovante|suporte|aplicativo)$/.test(area);
+  const staff = /^(portaria|totem-equipe|painel|relatorios|entregadores|pessoas|configuracoes|avisos|ajuda|comprovante|suporte|aplicativo)$/.test(area);
   return `/entrar?next=${encodeURIComponent(`/c/${slug}/${staff ? area : 'portaria'}`)}&portal=${slug}`;
 }

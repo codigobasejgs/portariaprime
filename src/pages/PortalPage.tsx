@@ -57,6 +57,37 @@ export function PortalNotFound({ error }: { error?: string | null }) {
 }
 
 /**
+ * Convite do pré-cadastro (/c/{slug}?invite=TOKEN): o token sai da URL e fica nesta aba até o pedido existir.
+ * ponytail: sessionStorage não atravessa abas — com confirmação de e-mail em outra aba o convite não é vinculado
+ * (o cadastro segue normal). Produção autoconfirma; se mudar, levar o token no pp_signup do signUp.
+ */
+const inviteKey = (slug: string) => `pp_invite:${slug}`;
+const getInvite = (slug: string) => { try { return sessionStorage.getItem(inviteKey(slug)); } catch { return null; } };
+const dropInvite = (slug: string) => { try { sessionStorage.removeItem(inviteKey(slug)); } catch { /* ok */ } };
+type Invite = { full_name: string; block: string | null; label: string; unit: string };
+function useInvite(slug: string) {
+  const [inv, setInv] = useState<Invite | null>(null);
+  useEffect(() => {
+    const q = new URLSearchParams(location.search);
+    const fromUrl = q.get('invite');
+    if (fromUrl) {
+      if (/^[0-9a-f]{64}$/.test(fromUrl)) try { sessionStorage.setItem(inviteKey(slug), fromUrl); } catch { /* ok */ }
+      q.delete('invite');
+      history.replaceState(history.state, '', `${location.pathname}${q.toString() ? `?${q}` : ''}`);
+    }
+    const tok = getInvite(slug);
+    if (!tok) return;
+    supabase.rpc('resident_invite_peek', { p_slug: slug, p_token: tok }).then(({ data, error }) => {
+      if (error) return;
+      if (!data) dropInvite(slug); else setInv(data);
+    });
+  }, [slug]);
+  return inv;
+}
+const inviteInitial = (i: Invite | null): Partial<SignupForm> | undefined => (i ? { name: i.full_name, block: i.block || '', unit: i.label } : undefined);
+const InviteNote = ({ inv }: { inv: Invite | null }) => (inv ? <Alert tone="info">Convite para <strong>{inv.full_name}</strong> · {inv.unit}. Confira os dados, crie sua senha e aceite o termo. Depois do envio, a administração aprova o cadastro.</Alert> : null);
+
+/**
  * /c/{slug} sem vínculo: portal exclusivo do morador (é o link divulgado aos moradores).
  * Administração e portaria NÃO aparecem aqui: entram pelo login comum (/entrar) e o servidor decide
  * o papel; esconder os cartões não é a proteção — cada rota e RPC continua exigindo o vínculo certo.
@@ -65,6 +96,7 @@ export function PortalPage({ slug }: { slug: string }) {
   const { portal, error } = usePortal(slug);
   const { session, ctx, signOut } = useSession();
   const { isInstalled, isInstallable, promptInstall } = usePwaInstall();
+  const inv = useInvite(slug);
   if (portal === undefined) return <Spinner />;
   if (!portal || portal.status !== 'active') return <PortalNotFound error={error || (portal ? 'Este portal está temporariamente indisponível.' : null)} />;
   const here = `/c/${slug}`;
@@ -84,6 +116,7 @@ export function PortalPage({ slug }: { slug: string }) {
         <p className="text-muted">Acompanhe as encomendas e correspondências da sua unidade, receba avisos quando algo chegar e retire na portaria com o QR Code.</p>
       </section>
 
+      {inv && <div className="mt-4"><InviteNote inv={inv} /></div>}
       {session && <p className="mt-4 text-sm text-muted">Conectado como <strong className="break-all">{ctx?.email}</strong>, sem acesso de morador aqui. "Entrar como morador" sai desta conta.</p>}
       <div className="mt-6 grid sm:grid-cols-2 gap-3">
         <Button onClick={enter} className="w-full min-h-14 text-base">Entrar como morador</Button>
@@ -276,6 +309,7 @@ export function ResidentSignupPage({ slug }: { slug: string }) {
   // Sem sessão (confirmação de e-mail ligada): a tela de recebido sobrevive ao F5 nesta aba.
   const key = `pp_signup_sent:${slug}`;
   const [sent, setSent] = useState<string | null>(() => { try { return sessionStorage.getItem(key); } catch { return null; } });
+  const inv = useInvite(slug);
   if (portal === undefined) return <Spinner />;
   if (!portal || portal.status !== 'active') return <PortalNotFound error={perr || (portal ? 'Este portal está temporariamente indisponível.' : null)} />;
   if (sent) return (
@@ -289,7 +323,7 @@ export function ResidentSignupPage({ slug }: { slug: string }) {
     <PortalShell portal={portal}>
       <h2 className="text-2xl font-semibold">Criar minha conta</h2>
       <p className="mt-1 text-sm text-muted">Preencha uma vez. A administração do {portal.name} confere os dados e libera seu acesso.</p>
-      <ResidentForm slug={slug} account initial={qrBlock()} onDone={({ session, email }) => {
+      <ResidentForm key={inv ? 'convite' : 'livre'} slug={slug} account initial={inviteInitial(inv) || qrBlock()} notice={<InviteNote inv={inv} />} onDone={({ session, email }) => {
         // Com sessão (confirmação automática): quem navega é o efeito do /cadastro ao ver a sessão no contexto
         // (navegar aqui chegaria antes dela e a rota sem sessão devolveria ao portal). Lá o cadastro é finalizado.
         if (session) return;
@@ -310,13 +344,18 @@ export function RequestAccessPage({ slug }: { slug: string }) {
   const [req, setReq] = useState<any>(undefined);
   const [review, setReview] = useState<any>(null);
   const [checking, setChecking] = useState(false);
+  const inv = useInvite(slug);
   const load = async () => {
     setChecking(true);
     try {
       // Idempotente: cria o pedido a partir do que foi preenchido no cadastro (se houver).
       const fin = await rpc<any>('resident_signup_finalize');
       setReview(fin?.status === 'needs_review' && fin.slug === slug ? fin : null);
-      setReq(await rpc('my_access_request', { p_slug: slug }));
+      const r = await rpc<any>('my_access_request', { p_slug: slug });
+      // Convite: liga o pedido pendente à unidade do pré-cadastro (não aprova; o síndico decide).
+      const tok = getInvite(slug);
+      if (tok && r?.status === 'pending') await rpc('resident_invite_complete', { p_slug: slug, p_token: tok }).then(() => dropInvite(slug), () => null);
+      setReq(r);
     } catch { setReq(null); } finally { setChecking(false); }
   };
   useEffect(() => { if (session) void load(); }, [session, slug]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -354,12 +393,13 @@ export function RequestAccessPage({ slug }: { slug: string }) {
   const d = review?.draft;
   const initial: Partial<SignupForm> = d ? { name: d.full_name, phone: maskPhone(d.phone || ''), block: d.block || '', unit: d.unit || '' }
     : req ? { name: req.full_name || '', phone: maskPhone(req.phone || ''), block: req.block_text || '', unit: req.unit || '' }
-    : { name: String(session.user.user_metadata?.full_name || '') };
+    : inviteInitial(inv) || { name: String(session.user.user_metadata?.full_name || '') };
   return (
     <PortalShell portal={portal}>
       <h2 className="text-2xl font-semibold">{review ? 'Revise seu cadastro' : 'Cadastro de morador'}</h2>
       <p className="mt-1 text-sm text-muted">Conectado como <strong>{ctx?.email}</strong>. A administração confere os dados antes de liberar o acesso.</p>
       <ResidentForm key={JSON.stringify(initial)} slug={slug} account={false} initial={initial} onDone={() => void load()} notice={<>
+        {!req && !review && <InviteNote inv={inv} />}
         {review && <Alert tone="warning">Seu cadastro não pôde ser enviado: {review.reason} Confira os dados abaixo e marque novamente a ciência do termo.</Alert>}
         {!review && req?.status === 'revoked' && <Alert tone="warning">Seu acesso a este condomínio foi encerrado pela administração (por exemplo, mudança de unidade). Se ainda mora aqui, envie um novo pedido.</Alert>}
         {!review && req?.status === 'rejected' && <Alert tone="warning">Sua solicitação anterior não foi aprovada{req.reason ? `: ${req.reason}` : ''}. Revise os dados ou fale com a administração.</Alert>}

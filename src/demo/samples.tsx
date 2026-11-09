@@ -23,6 +23,13 @@ export function DemoLabelSample({ onPick }: { onPick: (b: Blob) => void }) {
     Usar etiqueta de exemplo</button>;
 }
 
+/** CNH fictícia (nome e CPF inventados; o CPF só passa no DV). */
+export function DemoCnhSample({ onPick }: { onPick: (b: Blob) => void }) {
+  if (!DEMO) return null;
+  return <button type="button" className={btn} onClick={async () => onPick(await draw(['CNH · Rodrigo Fictício Santos', 'CPF 529.982.247-25', 'Registro 01234567890 · Cat. AB'], '#e7f3ea'))}>
+    Simular CNH de exemplo</button>;
+}
+
 export function DemoPhotoSample({ onPick }: { onPick: (b: Blob) => void }) {
   if (!DEMO) return null;
   return <button type="button" className={btn} onClick={async () => onPick(await draw(['Foto de exemplo', 'Item entregue na portaria'], '#e8eef7'))}>Usar foto de exemplo</button>;
@@ -32,7 +39,7 @@ export function DemoPhotoSample({ onPick }: { onPick: (b: Blob) => void }) {
 export function DemoQrSample({ onPick }: { onPick: (code: string) => void }) {
   if (!DEMO) return null;
   const pick = () => {
-    const p = store.s.packages.filter((x) => WAITING.includes(x.status)).sort((a, b) => a.received_at.localeCompare(b.received_at))[0];
+    const p = store.s.packages.filter((x) => WAITING.includes(x.status) && !x.rejected_at).sort((a, b) => a.received_at.localeCompare(b.received_at))[0];
     if (!p) return alert('Nenhuma encomenda aguardando retirada.');
     const token = `PPDEMO.${crypto.randomUUID()}`;
     store.s.tokens.push({ token, package_id: p.id, expires_at: new Date(Date.now() + 48 * 3600_000).toISOString(), used_at: null });

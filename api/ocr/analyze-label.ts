@@ -1,5 +1,6 @@
 /**
- * POST /api/ocr/analyze-label  { tenantId, imageBase64 }
+ * POST /api/ocr/analyze-label  { tenantId, imageBase64, kind?: 'cnh' | 'cnh-photo', courierId? }
+ * kind 'cnh': lê a CNH do entregador (mesma franquia). kind 'cnh-photo': guarda a foto (opt-in), sem IA.
  * OCR de etiqueta via Gemini, somente no servidor. Exige equipe ativa do
  * condomínio, recurso no plano e franquia disponível (contador atômico).
  * O resultado é SUGESTÃO: o porteiro confirma unidade/destinatário/rastreio.
@@ -7,8 +8,11 @@
  */
 import { GoogleGenAI, Type } from '@google/genai';
 import { handler, json, readJson, isUuid, HttpError } from '../_lib/http.js';
-import { requireUser, rpcError } from '../_lib/supabase.js';
+import { randomUUID } from 'node:crypto';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { requireUser, rpcError, serviceClient } from '../_lib/supabase.js';
 import { env, optionalEnv } from '../_lib/env.js';
+import { normalizeCnh, readCnh } from '../_lib/cnh.js';
 
 const NSTR = { type: Type.STRING, nullable: true };
 const SCHEMA = {
@@ -98,19 +102,65 @@ export function normalizeLabel(d: any) {
   };
 }
 
+/**
+ * Foto da CNH: a sessão autoriza ANTES de qualquer escrita; o service só envia para caminho novo e vincula via RPC
+ * service_role (confere ator, objeto existente e ponteiro vazio). Falha no vínculo apaga só o arquivo novo; nunca o anterior.
+ */
+async function saveCnhPhoto(client: SupabaseClient, tenantId: string, courierId: unknown, mime: string, data: string) {
+  if (!isUuid(courierId)) throw new HttpError(400, 'Entregador inválido.');
+  if (mime !== 'image/jpeg') throw new HttpError(400, 'Envie a foto em JPEG.');
+  const { data: auth, error: ae } = await client.rpc('courier_photo_authorize', { p_tenant: tenantId, p_courier: courierId });
+  if (ae) rpcError(ae);
+  if (!isUuid(auth?.actor_id)) throw new HttpError(403, 'Sem permissão para esta ação.');
+  if (auth.has_photo) throw new HttpError(409, 'Foto já guardada para este entregador.');
+  const path = `${tenantId}/couriers/${courierId}/cnh-${randomUUID().replace(/-/g, '')}.jpg`;
+  const bucket = serviceClient().storage.from('tenant-private');
+  const up = await bucket.upload(path, Buffer.from(data, 'base64'), { contentType: 'image/jpeg', upsert: false });
+  if (up.error) throw new HttpError(502, 'Falha ao guardar a foto. O cadastro do entregador continua válido.');
+  const { error } = await serviceClient().rpc('courier_attach_photo', { p_tenant: tenantId, p_courier: courierId, p_path: path, p_actor: auth.actor_id });
+  if (error) { await bucket.remove([path]); rpcError(error); }
+  return { saved: true };
+}
+
+/** Síndico vê a foto por URL assinada de 60 s; a sessão autoriza e audita (courier_photo_reveal) antes do service assinar. */
+async function viewCnhPhoto(client: SupabaseClient, tenantId: string, courierId: unknown, reason: unknown) {
+  if (!isUuid(courierId)) throw new HttpError(400, 'Entregador inválido.');
+  const { data: r, error } = await client.rpc('courier_photo_reveal', { p_tenant: tenantId, p_courier: courierId, p_reason: typeof reason === 'string' ? reason : '' });
+  if (error) rpcError(error);
+  if (typeof r?.path !== 'string' || !r.path.startsWith(`${tenantId}/couriers/${courierId}/`)) throw new HttpError(404, 'Foto não encontrada.');
+  const { data: s, error: se } = await serviceClient().storage.from('tenant-private').createSignedUrl(r.path, 60);
+  if (se || !s?.signedUrl) throw new HttpError(404, 'Foto não encontrada.');
+  return { url: s.signedUrl, expiresIn: 60 };
+}
+
 export const POST = handler(async (request) => {
   const body = await readJson(request, 6 * 1024 * 1024);
   if (!isUuid(body.tenantId)) throw new HttpError(400, 'Condomínio inválido.');
+  if (body.kind === 'cnh-photo-view') {
+    const { client } = await requireUser(request);
+    return json(await viewCnhPhoto(client, body.tenantId, body.courierId, body.reason));
+  }
   const m = typeof body.imageBase64 === 'string' && body.imageBase64.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/);
   if (!m) throw new HttpError(400, 'Envie uma foto JPEG, PNG ou WebP.');
   if ((m[2].length * 3) / 4 > MAX_BYTES) throw new HttpError(413, 'Foto grande demais (máx. 4 MB).');
 
   const { client } = await requireUser(request);
+  // Foto da CNH (opt-in do porteiro, entregador já confirmado): sem IA e sem franquia. Vercel Hobby: sem função nova.
+  if (body.kind === 'cnh-photo') return json(await saveCnhPhoto(client, body.tenantId, body.courierId, m[1], m[2]));
   const ai = new GoogleGenAI({ apiKey: env('GEMINI_API_KEY') });
   const { data: allowed, error } = await client.rpc('consume_ocr', { p_tenant: body.tenantId });
   if (error) rpcError(error);
   if (!allowed) {
     return json({ error: 'Leitura automática indisponível (plano ou franquia do mês). Digite os dados manualmente.', manual: true }, 402);
+  }
+
+  if (body.kind === 'cnh') {
+    // CNH do entregador: só a leitura revisada volta; o cadastro é feito depois que o porteiro confere (courier_upsert_from_ocr).
+    try { return json({ kind: 'cnh', ...normalizeCnh(await readCnh(ai, m[1], m[2])) }); }
+    catch (e: any) {
+      console.error('[ocr-cnh] leitura indisponível', e?.status || '');
+      return json({ error: 'Não foi possível ler a CNH agora. Digite os dados manualmente.', manual: true }, 502);
+    }
   }
 
   try {
