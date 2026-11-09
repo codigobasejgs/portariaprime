@@ -19,18 +19,28 @@ export function TeamCard() {
   const [porterLink, setPorterLink] = useState(false);
   const [resetting, setResetting] = useState<any>(null);
   const [local, setLocal] = useState<Set<string>>(new Set());
+  const [bio, setBio] = useState<Map<string, any>>(new Map());
+  const [editing, setEditing] = useState<any>(null);
+  const { guard, dialog } = useSensitive('Excluir um porteiro da equipe. Confirme sua identidade.');
   const { busy, run } = useAction();
   const load = useCallback(() => Promise.all([
     rpc<any[]>('list_members', { p_tenant: t.tenant.id }),
     rpc<any[]>('staff_login_accounts_list', { p_tenant: t.tenant.id }).catch(() => []),
-  ]).then(([m, s]) => { setRows(m.filter((x) => x.role !== 'morador')); setLocal(new Set((s || []).map((x) => x.user_id))); setError(null); })
-    .catch((e) => setError(e.message)), [t.tenant.id]);
+    rpc<any[]>('porter_team_list', { p_tenant: t.tenant.id }).catch(() => []),
+  ]).then(([m, s, p]) => {
+    setRows(m.filter((x) => x.role !== 'morador')); setLocal(new Set((s || []).map((x) => x.user_id)));
+    setBio(new Map((p || []).map((x) => [x.user_id, x]))); setError(null);
+  }).catch((e) => setError(e.message)), [t.tenant.id]);
   useEffect(() => { load(); }, [load]);
   if (!t.can('team')) return null;
   const toggle = (m: any, revoking = m.status === 'active') => {
     if (revoking && !confirm(`Revogar o acesso de ${m.full_name || m.email}? A pessoa perde o acesso imediatamente, mesmo com o app aberto.`)) return;
     run(async () => { await rpc('set_membership_status', { p_membership: m.membership_id, p_status: revoking ? 'revoked' : 'active' }); await load(); },
       revoking ? 'Acesso revogado.' : m.status === 'pending' ? 'Porteiro aprovado. Ele já pode iniciar o turno.' : 'Acesso reativado.');
+  };
+  const remove = (m: any) => {
+    if (!confirm(`Excluir ${m.full_name || m.email} da equipe? O acesso acaba na hora e a foto de referência facial é eliminada. Encomendas que ele registrou continuam no histórico. Não dá para desfazer.`)) return;
+    run(guard(async () => { await rpc('porter_delete', { p_tenant: t.tenant.id, p_user: m.user_id }); await load(); }), 'Porteiro excluído.');
   };
   return (
     <Card className="space-y-3">
@@ -53,14 +63,17 @@ export function TeamCard() {
                   <Badge tone={m.role === 'admin' ? 'accent' : 'neutral'}>{ROLE[m.role] || m.role}</Badge>{' '}
                   {m.status === 'pending' ? <Badge tone="warning">aguardando aprovação</Badge> : m.status !== 'active' && <Badge tone="danger">revogado</Badge>}
                   {local.has(m.user_id) && <Badge tone="neutral">acesso com senha</Badge>}
+                  {bio.has(m.user_id) && <Badge tone="neutral">biometria · {bio.get(m.user_id).document_masked}</Badge>}
                   {m.role === 'admin' && m.permissions?.length > 0 && <span className="block text-xs text-muted">Pode: {m.permissions.map((p: string) => PERM[p] || p).join(', ')}</span>}
                 </span>
                 <span className="flex flex-wrap gap-1">
-                  {local.has(m.user_id) && m.status === 'active' && <Button variant="ghost" onClick={() => setResetting(m)}>Trocar senha</Button>}
+                  {m.role === 'porteiro' && <Button variant="ghost" onClick={() => setEditing(m)}>Editar dados</Button>}
+                  {(local.has(m.user_id) || bio.has(m.user_id)) && m.status !== 'revoked' && <Button variant="ghost" onClick={() => setResetting(m)}>Trocar senha</Button>}
                   {m.status === 'pending' ? <>
                     <Button loading={busy} onClick={() => toggle(m, false)}>Aprovar</Button>
                     <Button variant="ghost" loading={busy} onClick={() => toggle(m, true)}>Recusar</Button>
                   </> : <Button variant="ghost" loading={busy} onClick={() => toggle(m)}>{m.status === 'active' ? 'Revogar acesso' : 'Reativar'}</Button>}
+                  {m.role === 'porteiro' && <Button variant="ghost" loading={busy} onClick={() => remove(m)}>Excluir</Button>}
                 </span>
               </li>
             ))}
@@ -70,6 +83,8 @@ export function TeamCard() {
       {creating && <CreateAccessModal onClose={() => setCreating(false)} onDone={() => { setCreating(false); load(); }} />}
       {porterLink && <PorterLinkModal onClose={() => setPorterLink(false)} />}
       {resetting && <ResetPasswordModal member={resetting} onClose={() => setResetting(null)} />}
+      {editing && <EditPorterModal member={editing} identity={bio.get(editing.user_id)} onClose={() => setEditing(null)} onDone={() => { setEditing(null); load(); }} />}
+      {dialog}
     </Card>
   );
 }
@@ -164,6 +179,40 @@ function ResetPasswordModal({ member, onClose }: { member: any; onClose: () => v
         <p className="text-sm text-muted">Login: <strong>{member.email}</strong>. A senha antiga deixa de funcionar e as sessões abertas são encerradas.</p>
         <PasswordFields value={pw} onChange={setPw} />
         <Button type="submit" loading={busy} disabled={!pwOk(pw)} className="w-full">Salvar nova senha</Button>
+      </form>
+      {dialog}
+    </Modal>
+  );
+}
+
+/** Nome e telefone de qualquer porteiro; documento (login da portaria) só de quem tem biometria. Em branco = mantém. */
+function EditPorterModal({ member, identity, onClose, onDone }: { member: any; identity?: any; onClose: () => void; onDone: () => void }) {
+  const t = useTenant();
+  const [f, setF] = useState({ fullName: identity?.full_name || member.full_name || '', phone: identity?.phone || '', documentType: identity?.document_type || 'CPF', document: '' });
+  const { guard, dialog } = useSensitive('Alterar dados de um porteiro. Confirme sua identidade.');
+  const { busy, run } = useAction();
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    run(guard(async () => {
+      await rpc('porter_update', { p_tenant: t.tenant.id, p_user: member.user_id, p_full_name: f.fullName, p_phone: f.phone || null,
+        p_document_type: f.document ? f.documentType : null, p_document: f.document || null });
+      onDone();
+    }), 'Dados do porteiro atualizados.');
+  };
+  return (
+    <Modal title={`Editar porteiro — ${member.full_name || member.email}`} onClose={onClose}>
+      <form onSubmit={submit} className="space-y-4">
+        <Field label="Nome completo"><Input required minLength={2} maxLength={120} value={f.fullName} onChange={(e) => setF({ ...f, fullName: e.target.value })} /></Field>
+        <Field label="Telefone" hint="Com DDD."><Input inputMode="tel" maxLength={20} value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} /></Field>
+        {identity && (
+          <div className="grid grid-cols-[7rem_1fr] gap-2">
+            <Field label="Documento"><Select value={f.documentType} onChange={(e) => setF({ ...f, documentType: e.target.value })}><option>CPF</option><option>RG</option><option>CNH</option></Select></Field>
+            <Field label="Novo número" hint={`Atual: ${identity.document_masked}. Em branco mantém. É o que ele usa para entrar.`}>
+              <Input inputMode="numeric" autoComplete="off" value={f.document} onChange={(e) => setF({ ...f, document: e.target.value })} /></Field>
+          </div>
+        )}
+        <p className="text-xs text-muted">Encomendas já registradas mantêm o nome da época. A alteração fica na auditoria.</p>
+        <Button type="submit" loading={busy} className="w-full">Salvar</Button>
       </form>
       {dialog}
     </Modal>

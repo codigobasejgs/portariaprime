@@ -60,6 +60,20 @@ export const ADMIN_HANDLERS: Record<string, Handler> = {
     if (m.user_id === store.userId) fail('Você não pode alterar o próprio acesso.');
     m.status = a.p_status; store.changed('members'); return null;
   },
+  porter_team_list: (a) => { tenant(a); admin(); return []; },
+  porter_update: (a) => {
+    tenant(a); admin();
+    const u = store.s.users.find((x) => x.id === a.p_user && x.role === 'porteiro') || fail('Porteiro não encontrado neste condomínio.');
+    const name = String(a.p_full_name || '').trim();
+    if (name.length < 2 || name.length > 120) fail('Informe o nome completo (2 a 120 caracteres).');
+    u.full_name = name; store.changed('members'); return { user_id: u.id, full_name: name };
+  },
+  porter_delete: (a) => {
+    tenant(a); admin();
+    if (!store.s.users.some((x) => x.id === a.p_user && x.role === 'porteiro')) fail('Porteiro não encontrado neste condomínio.');
+    store.s.memberships = store.s.memberships.filter((m) => m.user_id !== a.p_user);
+    store.changed('members'); return { deleted: true };
+  },
   list_access_requests: (a) => {
     tenant(a); admin();
     return store.s.requests.filter((r) => !a.p_status || r.status === a.p_status).sort((x, y) => y.created_at.localeCompare(x.created_at)).map((r) => ({ ...r }));
