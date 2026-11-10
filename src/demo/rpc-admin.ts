@@ -188,6 +188,24 @@ export const ADMIN_HANDLERS: Record<string, Handler> = {
       avg_pickup_h: picked.length ? Math.round(picked.reduce((s, p) => s + hoursBetween(p.received_at, p.picked_up_at!), 0) / picked.length * 10) / 10 : null,
       by_carrier: count((p) => p.carrier).map(({ k, n }) => ({ carrier: k, n })), top_units: count((p) => unitText(p.unit_id) || '—').slice(0, 10).map(({ k, n }) => ({ unit: k, n })) };
   },
+  // Histórico fictício derivado das encomendas e contatos da demonstração (e-mail aceito; WhatsApp desligado nos contatos).
+  notification_log: (a) => {
+    tenant(a); admin();
+    const f = a.p_filters || {}, q = (f.search || '').toLowerCase();
+    const rows: any[] = [];
+    for (const p of store.s.packages) for (const c of store.s.contacts.filter((x) => x.unit_id === p.unit_id && x.active && x.email))
+      for (const [event, at] of [['package_received', p.notified_at], ['package_picked_up', p.picked_up_at]] as const) {
+        if (!at) continue;
+        const u = store.unit(p.unit_id!)!;
+        rows.push({ id: `${p.id}-${c.id}-${event}`, created_at: at, event, channel: 'email', status: 'accepted', attempts: 1, last_error: null, recipient: c.email,
+          sent_at: at, last_attempt_at: at, provider_ref: 'demo-ficticio', unit_id: u.id, unit_block: u.block, unit_label: u.label, carrier: p.carrier, tracking_code: p.tracking_code, person: c.name });
+      }
+    return rows.filter((r) => (!f.unit || r.unit_id === f.unit) && (!f.block || norm(r.unit_block) === norm(f.block)) && (!f.channel || r.channel === f.channel)
+      && (!f.status || f.status === 'sent') && (!q || `${r.person} ${r.recipient}`.toLowerCase().includes(q))
+      && (!f.from || r.created_at.slice(0, 10) >= f.from) && (!f.to || r.created_at.slice(0, 10) <= f.to))
+      .sort((x, y) => y.created_at.localeCompare(x.created_at))
+      .filter((r) => !a.p_cursor_at || r.created_at < a.p_cursor_at).slice(0, a.p_limit || 100);
+  },
   report_residents: (a) => {
     tenant(a); admin();
     const f = a.p_filters || {}, q = (f.search || '').toLowerCase();

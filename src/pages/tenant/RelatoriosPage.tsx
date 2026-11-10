@@ -29,7 +29,7 @@ const clean = <T extends Record<string, string | undefined>>(f: T) => Object.fro
 
 export function RelatoriosPage() {
   const t = useTenant();
-  const [kind, setKind] = useState<'encomendas' | 'moradores'>(query('tipo') === 'moradores' ? 'moradores' : 'encomendas');
+  const [kind, setKind] = useState<'encomendas' | 'moradores' | 'envios'>(() => { const q = query('tipo'); return q === 'moradores' || q === 'envios' ? q : 'encomendas'; });
   const [opt, setOpt] = useState<Opt | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => { rpc<Opt>('report_filter_options', { p_tenant: t.tenant.id }).then(setOpt).catch((e) => setError(e.message)); }, [t.tenant.id]);
@@ -39,13 +39,13 @@ export function RelatoriosPage() {
       <div className="flex flex-wrap items-end justify-between gap-2">
         <h1 className="text-2xl font-semibold">Relatórios</h1>
         <div role="tablist" aria-label="Tipo de relatório" className="inline-flex rounded-xl border border-line p-1">
-          {([['encomendas', 'Encomendas'], ['moradores', 'Moradores e unidades']] as const).map(([k, l]) => (
+          {([['encomendas', 'Encomendas'], ['moradores', 'Moradores e unidades'], ['envios', 'Mensagens enviadas']] as const).map(([k, l]) => (
             <button key={k} role="tab" aria-selected={kind === k} onClick={() => setKind(k)}
               className={`min-h-10 px-4 rounded-lg text-sm font-medium ${kind === k ? 'bg-primary text-primary-fg' : 'text-muted hover:text-text'}`}>{l}</button>
           ))}
         </div>
       </div>
-      {!opt ? <Spinner /> : kind === 'encomendas' ? <PackagesReport opt={opt} /> : <ResidentsReport opt={opt} />}
+      {!opt ? <Spinner /> : kind === 'encomendas' ? <PackagesReport opt={opt} /> : kind === 'moradores' ? <ResidentsReport opt={opt} /> : <SendsReport opt={opt} />}
     </div>
   );
 }
@@ -255,6 +255,115 @@ function Bars({ title, items }: { title: string; items: [string, number][] }) {
         </li>
       ))}</ul>
     </Card>
+  );
+}
+
+const SEND_EVENT: Record<string, string> = {
+  package_received: 'Encomenda chegou', package_picked_up: 'Encomenda retirada', package_reminder: 'Lembrete de retirada',
+  access_received: 'Cadastro recebido', access_decision: 'Resposta do cadastro', resident_invite: 'Convite para cadastro',
+};
+const SEND_CH: Record<string, string> = { whatsapp: 'WhatsApp', email: 'E-mail', push: 'Aplicativo' };
+const sendState = (r: any): [string, 'success' | 'warning' | 'danger' | 'neutral'] =>
+  r.status === 'delivered' ? ['Entregue', 'success']
+    : r.status === 'accepted' ? ['Enviado', 'success']
+    : r.status === 'failed' ? [r.attempts >= 5 ? 'Falhou' : 'Falhou, vai tentar de novo', 'danger']
+    : r.status === 'disabled' ? ['Não enviado', 'neutral'] : ['Na fila', 'warning'];
+type SendFilters = Partial<Record<'from' | 'to' | 'block' | 'unit' | 'channel' | 'status' | 'search', string>>;
+
+/** Histórico de envios aos moradores (outbox): prova de envio por unidade/morador/canal. "Enviado" = aceito pelo provedor. */
+function SendsReport({ opt }: { opt: Opt }) {
+  const t = useTenant();
+  const labels = useUnitLabels();
+  const tz = t.tenant.timezone;
+  const [f, setF] = useState<SendFilters>(() => ({ from: ymd(tz, -29), to: ymd(tz) }));
+  const [rows, setRows] = useState<any[] | null>(null);
+  const [more, setMore] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const filters = useMemo(() => clean(f), [f]);
+  const key = JSON.stringify(filters);
+  const page = (limit: number, cur?: any) => rpc<any[]>('notification_log', { p_tenant: t.tenant.id, p_filters: filters, p_limit: limit,
+    p_cursor_at: cur?.created_at || null, p_cursor_id: cur?.id || null });
+  useEffect(() => {
+    setRows(null); setError(null);
+    const id = setTimeout(() => page(100).then((r) => { setRows(r); setMore(r.length === 100); }).catch((e) => setError(e.message)), 250);
+    return () => clearTimeout(id);
+  }, [t.tenant.id, key]); // eslint-disable-line react-hooks/exhaustive-deps
+  const loadMore = async () => { const r = await page(100, rows![rows!.length - 1]); setRows([...rows!, ...r]); setMore(r.length === 100); };
+  const units = opt.units.filter((u) => !f.block || (u.block || '').toUpperCase() === f.block.toUpperCase());
+  const set = (k: keyof SendFilters) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value, ...(k === 'block' ? { unit: '' } : {}) });
+  const COLS: [string, string][] = [['created', 'Gerado em'], ['unit', 'Unidade'], ['person', 'Morador'], ['channel_label', 'Canal'], ['recipient', 'Destino'],
+    ['event_label', 'Mensagem'], ['package', 'Encomenda'], ['state', 'Situação'], ['sent', 'Enviado em'], ['provider_ref', 'Protocolo do provedor'], ['last_error', 'Motivo da falha']];
+  const shape = (r: any) => ({ ...r, created: dateTime(r.created_at, tz), unit: r.unit_label ? unitName(r.unit_block, r.unit_label, labels) : '', channel_label: SEND_CH[r.channel] || r.channel,
+    recipient: r.recipient || (r.channel === 'push' ? 'Aplicativo do morador' : ''), event_label: SEND_EVENT[r.event] || r.event,
+    package: [r.carrier, r.tracking_code].filter(Boolean).join(' · '), state: sendState(r)[0], sent: r.sent_at ? dateTime(r.sent_at, tz) : '',
+    last_error: r.status === 'failed' || r.status === 'disabled' ? r.last_error || '' : '' });
+  const exp = async (type: 'csv' | 'xlsx' | 'pdf') => {
+    setBusy(type);
+    try {
+      const all: any[] = [];
+      for (let cur: any = null; ;) { const p = await page(1000, cur); all.push(...p); if (p.length < 1000) break; cur = p[p.length - 1]; }
+      const out = all.map(shape);
+      const base = `envios-${t.tenant.slug}-${f.from || 'inicio'}-a-${f.to || 'hoje'}`;
+      if (type === 'csv') download(`${base}.csv`, toCsv(out, COLS));
+      else if (type === 'xlsx') {
+        const { xlsx } = await import('../../lib/xlsx');
+        download(`${base}.xlsx`, xlsx([{ name: 'Envios', rows: [COLS.map(([, h]) => h), ...out.map((r) => COLS.map(([k]) => r[k] ?? ''))] }]), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      } else {
+        const { dashboardPdf } = await import('../../lib/dashboard-pdf');
+        download(`${base}.pdf`, await dashboardPdf(`Mensagens enviadas aos moradores — ${t.branding?.display_name || t.tenant.name}`,
+          [`Período: ${f.from || 'início'} a ${f.to || 'hoje'}`, `"Enviado" = aceito pelo provedor (WhatsApp/e-mail) no horário indicado.`, `Gerado em ${dateTime(new Date().toISOString(), tz)}`],
+          [{ name: `Envios (${out.length})`, rows: [['Enviado em', 'Unidade', 'Morador', 'Canal', 'Destino', 'Mensagem', 'Situação'],
+            ...out.slice(0, 2000).map((r) => [r.sent || r.created, r.unit, r.person || '', r.channel_label, r.recipient, r.event_label, r.state])] }]), 'application/pdf');
+      }
+    } catch (e: any) { toast.error(e.message); } finally { setBusy(null); }
+  };
+  return (
+    <div className="space-y-4">
+      <Card className="space-y-3">
+        <p className="text-sm text-muted">Tudo o que o sistema enviou aos moradores: avisos de encomenda, lembretes, cadastro e convites. Use quando um morador disser que não recebeu.</p>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <Field label="De"><Input type="date" value={f.from || ''} max={f.to || undefined} onChange={set('from')} /></Field>
+          <Field label="até"><Input type="date" value={f.to || ''} min={f.from || undefined} onChange={set('to')} /></Field>
+          {opt.blocks.length > 0 && <Field label={labels.group}><Select value={f.block || ''} onChange={set('block')}><option value="">Todos</option>{opt.blocks.map((b) => <option key={b}>{b}</option>)}</Select></Field>}
+          <Field label="Unidade"><Select value={f.unit || ''} onChange={set('unit')}><option value="">Todas</option>{units.map((u) => <option key={u.id} value={u.id}>{unitName(u.block, u.label, labels)}</option>)}</Select></Field>
+          <Field label="Canal"><Select value={f.channel || ''} onChange={set('channel')}><option value="">Todos</option>{Object.entries(SEND_CH).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Select></Field>
+          <Field label="Situação"><Select value={f.status || ''} onChange={set('status')}>
+            <option value="">Todas</option><option value="sent">Enviado</option><option value="failed">Falhou</option><option value="pending">Na fila</option><option value="not_sent">Não enviado</option></Select></Field>
+          <Field label="Morador ou contato"><Input value={f.search || ''} maxLength={80} onChange={set('search')} placeholder="Nome, e-mail ou celular" /></Field>
+        </div>
+        <div className="flex flex-wrap gap-2 justify-end">
+          <Button variant="secondary" onClick={() => exp('csv')} loading={busy === 'csv'} disabled={!!busy || !rows?.length}><Download className="w-4 h-4" aria-hidden /> CSV</Button>
+          <Button variant="secondary" onClick={() => exp('xlsx')} loading={busy === 'xlsx'} disabled={!!busy || !rows?.length}><FileSpreadsheet className="w-4 h-4" aria-hidden /> Excel</Button>
+          <Button variant="secondary" onClick={() => exp('pdf')} loading={busy === 'pdf'} disabled={!!busy || !rows?.length}><FileText className="w-4 h-4" aria-hidden /> PDF</Button>
+        </div>
+      </Card>
+      {error && <Alert tone="danger">{error}</Alert>}
+      <Card>
+        {!rows ? <Spinner /> : rows.length === 0 ? <Empty title="Nenhum envio com esses filtros" /> : (
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <table className="w-full text-sm min-w-[820px]">
+              <thead className="text-left text-muted"><tr>{['Data', 'Unidade', 'Morador / destino', 'Canal', 'Mensagem', 'Situação'].map((h) => <th key={h} className="py-2 pr-3 first:pl-4 sm:first:pl-0 font-medium">{h}</th>)}</tr></thead>
+              <tbody className="divide-y divide-line">
+                {rows.map((r) => { const s = shape(r); const [label, tone] = sendState(r); return (
+                  <tr key={r.id} className="align-top">
+                    <td className="py-2 pr-3 pl-4 sm:pl-0 whitespace-nowrap">{s.sent || s.created}{s.sent && s.sent !== s.created && <span className="block text-xs text-muted">gerado {s.created}</span>}</td>
+                    <td className="pr-3 whitespace-nowrap">{s.unit || '—'}</td>
+                    <td className="pr-3">{r.person || <span className="text-muted">—</span>}<span className="block text-xs text-muted break-all">{s.recipient}</span></td>
+                    <td className="pr-3">{s.channel_label}</td>
+                    <td className="pr-3">{s.event_label}{s.package && <span className="block text-xs text-muted">{s.package}</span>}</td>
+                    <td><Badge tone={tone}>{label}</Badge>{s.last_error && <span className="block text-xs text-muted">{s.last_error}</span>}
+                      {r.provider_ref && <span className="block text-xs text-muted font-mono" title="Identificador do envio no provedor">{r.provider_ref}</span>}</td>
+                  </tr>
+                ); })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {rows && rows.length > 0 && <p className="text-xs text-muted mt-2">"Enviado" significa que o WhatsApp/e-mail aceitou a mensagem no horário mostrado. Se o morador não viu, confira o destino (número/e-mail) e a caixa de spam.</p>}
+        {more && <Button variant="ghost" className="mt-2" onClick={loadMore}>Carregar mais</Button>}
+      </Card>
+    </div>
   );
 }
 
