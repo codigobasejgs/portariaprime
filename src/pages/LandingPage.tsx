@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Bell, Check, ClipboardCheck, FileCheck2, History, LayoutDashboard, ListChecks, MapPin, Menu, PackageSearch, ScanLine, ShieldCheck, Smartphone, Target, Warehouse, X } from 'lucide-react';
+import { Bell, Check, ClipboardCheck, FileCheck2, FileSignature, FileSpreadsheet, Fingerprint, History, IdCard, KeyRound, LayoutDashboard, Layers, ListChecks, MailCheck, MapPin, Menu, PackageSearch, PackageX, ScanFace, ScanLine, ShieldCheck, Smartphone, Target, Timer, UserSearch, Warehouse, X } from 'lucide-react';
 import { PortariaPrimeLogo } from '../components/Brand';
 import { ContactForm } from '../components/ContactForm';
 import { KioskPilotForm, KioskPlanNote } from '../components/KioskPilotForm';
@@ -32,6 +32,24 @@ const DEMO: Record<'sindico' | 'portaria' | 'morador', { benefit: string; screen
   portaria: { benefit: 'Receber e entregar com menos digitação e prova registrada.', screen: 'recebimento', tasks: ['Fotografar a etiqueta e conferir a leitura', 'Guardar no local sugerido', 'Entregar com QR, assinatura e foto'] },
   morador: { benefit: 'Saber o que chegou e retirar sem fila de conferência.', screen: 'morador', tasks: ['Ver encomendas aguardando no Início', 'Mostrar o QR de retirada', 'Consultar quem retirou e o comprovante'] },
 };
+
+/** Recursos de segurança da operação (todos em produção). Texto descreve o que o sistema faz, sem promessa de resultado. */
+const SECURITY: [React.ElementType, string, string][] = [
+  [ScanFace, 'Porteiro identificado por rosto e senha', 'Cadastro pelo link do síndico com foto de referência fixa. No início de cada turno, senha e verificação facial comparadas no servidor com o cadastro.'],
+  [Timer, 'Turno de 12 horas', 'A sessão do porteiro expira sozinha a cada 12 horas. Quem assume o turno entra com a própria conta, e o síndico vê quem estava na portaria em cada horário.'],
+  [IdCard, 'Entregador identificado pela CNH', 'A portaria fotografa a CNH e o sistema preenche nome e documento para conferência. O síndico consulta o histórico de entregas de cada entregador.'],
+  [KeyRound, 'Palavra-chave de entrega', 'O morador cadastra no app a palavra-chave ou o código pedido pela transportadora, e a portaria vê na hora de receber.'],
+  [PackageX, 'Recusa pelo morador', 'Compra cancelada ou pacote de outra unidade: o morador recusa pelo app e a portaria é avisada para devolver, sem entregar por engano.'],
+  [UserSearch, 'Destinatário não identificado', 'Etiqueta sem nome completo ou de quem ainda não tem cadastro fica separada até o síndico indicar a unidade certa.'],
+];
+
+/** Gestão do síndico (todos em produção). */
+const MANAGEMENT: [React.ElementType, string, string][] = [
+  [FileSpreadsheet, 'Importação de planilhas', 'Traga a lista de unidades e moradores de outro sistema em CSV ou Excel, com prévia antes de confirmar. Cadastros existentes não são alterados.'],
+  [MailCheck, 'Histórico de mensagens enviadas', 'Para cada aviso de WhatsApp e e-mail: data, destino e situação. Quando um morador disser que não recebeu, você confere o envio por unidade ou morador e exporta em PDF.'],
+  [Layers, 'Endereçamento vertical ou horizontal', 'Bloco e apartamento, torre e unidade ou quadra e lote: os nomes seguem o seu condomínio em todas as telas e avisos.'],
+  [ShieldCheck, 'Auditoria da portaria', 'Tentativas de acesso, turnos, fotos de verificação e ações sensíveis ficam registradas para consulta do síndico.'],
+];
 
 /** Comportamento real do app Android gerenciado (docs/KIOSK_ANDROID.md e KIOSK_QA.md). */
 const KIOSK_FAQ: [string, string][] = [
@@ -108,7 +126,7 @@ export default function LandingPage() {
   };
   const selectable = (plans || []).filter((p) => p.published && !p.is_custom && p.prices.length);
   const custom = (plans || []).find((p) => p.is_custom);
-  const nav: [string, string][] = [['#como-funciona', 'Como funciona'], ['#demonstracao', 'Vídeo'], ['/demonstracao', 'Ver demonstração'], ['#portaria-exclusiva', 'Portaria Exclusiva'], ['/tutoriais', 'Tutoriais'], ['/planos', 'Planos e contrato']];
+  const nav: [string, string][] = [['#como-funciona', 'Como funciona'], ['#seguranca', 'Segurança'], ['/demonstracao', 'Ver demonstração'], ['#portaria-exclusiva', 'Portaria Exclusiva'], ['/tutoriais', 'Tutoriais'], ['/planos', 'Planos e contrato']];
   // /demonstracao precisa de carga completa da página (o modo demonstração é decidido antes do cliente existir).
   const navLink = ([h, l]: [string, string], extra = '') => h.startsWith('/') && h !== '/demonstracao'
     ? <a key={h} href={h} onClick={(e) => { onLink(e); setMenu(false); }} className={extra}>{l}</a>
@@ -163,6 +181,20 @@ export default function LandingPage() {
           </div>
         </section>
 
+        {/* Faixa de confiança: fatos verificáveis, sem números de clientes. */}
+        <section aria-label="Garantias da plataforma" className="border-b border-line bg-surface">
+          <ul className="max-w-6xl mx-auto px-4 py-5 grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-4 text-sm">
+            {([
+              [ShieldCheck, 'Dados isolados por condomínio', 'Cada condomínio vê só os próprios dados'],
+              [FileSignature, 'Contrato assinado na Autentique', 'Assinatura eletrônica das duas partes'],
+              [ScanFace, 'Portaria com identificação', 'Porteiro com rosto, senha e turno'],
+              [MailCheck, 'Avisos com histórico', 'Cada envio registrado e consultável'],
+            ] as [React.ElementType, string, string][]).map(([I, t, x]) => (
+              <li key={t} className="flex gap-3 items-start"><I className="w-5 h-5 mt-0.5 text-secondary shrink-0" aria-hidden /><span><strong className="block">{t}</strong><span className="text-muted">{x}</span></span></li>
+            ))}
+          </ul>
+        </section>
+
         {/* Vídeo demonstrativo: horizontal no computador, vertical no celular. Só carrega ao tocar (preload="none"). */}
         <section id="video" className="max-w-6xl mx-auto px-4 pt-16" aria-labelledby="video-h">
           <h2 id="video-h" className="text-3xl font-semibold">Veja o Portaria Prime em 1 minuto</h2>
@@ -196,6 +228,39 @@ export default function LandingPage() {
               <Shot s={SCREENS[f.screen]} onZoom={setZoom} sizes="(min-width: 1024px) 640px, 100vw" />
               <p className="mt-3 text-sm flex items-start gap-2"><f.icon className="w-4 h-4 mt-0.5 text-secondary shrink-0" aria-hidden /><span><strong>Efeito:</strong> {f.next}</span></p>
             </div>
+          </div>
+        </section>
+
+        {/* Segurança da portaria */}
+        <section id="seguranca" className="bg-midnight text-porcelain scroll-mt-16" aria-labelledby="seg-h">
+          <div className="max-w-6xl mx-auto px-4 py-16">
+            <p className="inline-flex items-center gap-2 rounded-full border border-champagne/50 px-3 py-1 text-xs font-semibold text-champagne"><Fingerprint className="w-4 h-4" aria-hidden />Segurança da portaria</p>
+            <h2 id="seg-h" className="mt-4 text-3xl sm:text-4xl font-semibold leading-tight max-w-3xl">Saiba quem recebeu, quem entregou e quem estava no turno.</h2>
+            <p className="mt-3 text-lg text-porcelain/80 max-w-3xl">Porteiro identificado, entregador registrado e morador no controle do que é dele. Cada passo fica documentado para o síndico consultar quando precisar.</p>
+            <ul className="mt-10 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {SECURITY.map(([I, t, x]) => (
+                <li key={t} className="rounded-2xl border border-porcelain/15 bg-white/[0.04] p-5">
+                  <span className="h-10 w-10 rounded-xl bg-champagne/15 grid place-items-center"><I className="w-5 h-5 text-champagne" aria-hidden /></span>
+                  <h3 className="mt-4 font-semibold text-lg">{t}</h3>
+                  <p className="mt-1 text-sm text-porcelain/75 leading-relaxed">{x}</p>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-6 text-xs text-porcelain/60">A verificação facial roda no navegador com câmera comum e é sempre somada à senha: não é identificação biométrica certificada. A leitura da CNH sugere os dados e a portaria confere antes de salvar.</p>
+          </div>
+        </section>
+
+        {/* Gestão do síndico */}
+        <section id="gestao" className="max-w-6xl mx-auto px-4 py-16 scroll-mt-16" aria-labelledby="gestao-h">
+          <h2 id="gestao-h" className="text-3xl font-semibold">Gestão completa para o síndico</h2>
+          <p className="text-muted mt-2 max-w-3xl">Da implantação ao dia a dia: traga os dados que você já tem, acompanhe cada aviso enviado e tenha resposta pronta quando um morador perguntar.</p>
+          <div className="mt-8 grid sm:grid-cols-2 gap-4">
+            {MANAGEMENT.map(([I, t, x]) => (
+              <Card key={t} className="flex gap-4">
+                <span className="h-11 w-11 shrink-0 rounded-xl bg-secondary/10 grid place-items-center"><I className="w-5 h-5 text-secondary" aria-hidden /></span>
+                <span><h3 className="font-semibold">{t}</h3><p className="text-sm text-muted mt-1">{x}</p></span>
+              </Card>
+            ))}
           </div>
         </section>
 
@@ -352,12 +417,32 @@ export default function LandingPage() {
           </div>
         </section>
 
+        {/* Contrato com assinatura eletrônica */}
+        <section id="contrato" className="max-w-6xl mx-auto px-4 pt-16 scroll-mt-16" aria-labelledby="contrato-h">
+          <div className="rounded-3xl border border-line bg-surface p-6 sm:p-10 grid lg:grid-cols-[1.2fr_1fr] gap-8 items-center">
+            <div>
+              <p className="inline-flex items-center gap-2 rounded-full bg-secondary/10 px-3 py-1 text-xs font-semibold text-secondary"><FileSignature className="w-4 h-4" aria-hidden />Contratação transparente</p>
+              <h2 id="contrato-h" className="mt-4 text-3xl font-semibold">Contrato oficial, preenchido para você e assinado na Autentique</h2>
+              <p className="text-muted mt-3">Escolha o plano e o contrato já vem com os dados do condomínio, do síndico e do plano. As duas partes assinam eletronicamente na Autentique, e o PDF assinado fica disponível no painel.</p>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <a href="/contrato" onClick={onLink} className="min-h-11 px-5 rounded-xl border border-line inline-flex items-center font-semibold hover:bg-surface-2">Ler o contrato completo</a>
+                <a href="/planos" onClick={onLink} className="min-h-11 px-5 rounded-xl bg-midnight text-porcelain inline-flex items-center font-semibold hover:opacity-90">Ver planos e contrato</a>
+              </div>
+            </div>
+            <ol className="space-y-3 text-sm">
+              {['Escolha o plano e comece o mês grátis', 'O contrato é preenchido com os dados informados', 'Síndico e Portaria Prime assinam na Autentique', 'O PDF assinado fica no painel e chega por e-mail'].map((t, i) => (
+                <li key={t} className="flex gap-3 items-start rounded-xl bg-bg p-3"><span className="h-7 w-7 shrink-0 rounded-full bg-midnight text-porcelain grid place-items-center font-semibold">{i + 1}</span><span className="pt-1">{t}</span></li>
+              ))}
+            </ol>
+          </div>
+        </section>
+
         {/* Migração */}
         <section className="max-w-6xl mx-auto px-4 py-16" aria-labelledby="mig-h">
           <h2 id="mig-h" className="text-3xl font-semibold">Vindo de outro sistema ou da planilha</h2>
           <div className="mt-6 grid md:grid-cols-3 gap-4">
-            <Card><h3 className="font-semibold">Unidades por planilha</h3><p className="text-sm text-muted mt-1">Importação CSV com prévia antes de confirmar; repetidas são ignoradas.</p></Card>
-            <Card><h3 className="font-semibold">Moradores pelo portal</h3><p className="text-sm text-muted mt-1">Cada morador pede acesso pelo link do condomínio e a administração aprova. Ninguém recebe senha por mensagem.</p></Card>
+            <Card><h3 className="font-semibold">Unidades e moradores por planilha</h3><p className="text-sm text-muted mt-1">Importação CSV ou Excel com prévia antes de confirmar; repetidas são ignoradas e cadastros existentes não são alterados.</p></Card>
+            <Card><h3 className="font-semibold">Convite para quem falta</h3><p className="text-sm text-muted mt-1">Unidades sem cadastro recebem convite por WhatsApp ou e-mail, disparado pelo síndico. Cada morador pede acesso e a administração aprova; ninguém recebe senha por mensagem.</p></Card>
             <Card><h3 className="font-semibold">Ajuda na importação</h3><p className="text-sm text-muted mt-1">Orientamos o formato da planilha. Não pedimos senhas de outros sistemas.</p></Card>
           </div>
         </section>
@@ -392,7 +477,10 @@ export default function LandingPage() {
               ['O aviso é automático mesmo?', 'Sim. Ao registrar a encomenda, os avisos entram em uma fila no servidor e são enviados sem depender da tela da portaria, com novas tentativas em caso de falha. WhatsApp depende do plano e da conexão do condomínio.'],
               ['O que acontece quando a franquia acaba?', 'A leitura de etiqueta volta à digitação manual e o WhatsApp deixa de ser enviado até o mês seguinte; o aviso no app e o e-mail continuam. Nada é cobrado a mais sem contratação.'],
               ['Quantos moradores por unidade?', 'Vários. Todos os moradores autorizados da unidade são avisados; o limite por unidade é configurado pela administração.'],
-              ['Como contrato?', 'Em Configurações › Plano e assinatura: escolha o plano, leia o contrato completo e confirme o aceite. A versão aceita fica guardada com o PDF. Aceitar não é pagar: o pagamento segue por link.'],
+              ['Como contrato?', 'Em Configurações › Plano e assinatura: escolha o plano e informe os dados do condomínio e do síndico. O contrato oficial é preenchido com esses dados e assinado eletronicamente pelas duas partes na Autentique; o PDF assinado fica no painel. Assinar não é pagar: o pagamento segue por link.'],
+              ['Como o porteiro entra no sistema?', 'O síndico gera um link ou QR de cadastro. O porteiro informa os dados, aceita o termo e registra a foto de referência. Em cada turno, entra com documento, senha e verificação facial; a sessão expira em 12 horas. O síndico aprova, edita, troca a senha ou exclui pelo painel.'],
+              ['Um morador disse que não recebeu o aviso. Como confiro?', 'Em Relatórios › Mensagens enviadas aparece cada WhatsApp e e-mail: data, destino e situação. Dá para filtrar por unidade ou morador e exportar em PDF ou Excel.'],
+              ['Já tenho a lista de moradores em planilha. Preciso digitar tudo?', 'Não. O importador aceita CSV ou Excel, reconhece as colunas, mostra uma prévia e não altera cadastros que já existem. Depois, o síndico pode convidar as unidades que ainda não têm cadastro.'],
               ['Posso exportar meus dados?', 'Relatórios exportam em CSV. Pedidos de exportação ou encerramento seguem o contrato e a política de privacidade.'],
               ['E se algo falhar?', 'Nada é considerado registrado sem confirmação do servidor. Falhas de aviso aparecem para a administração e são tentadas de novo.'],
               ['Como funciona o suporte?', 'A equipe do condomínio abre chamados com protocolo dentro do sistema e acompanha as respostas. O horário de atendimento é informado no próprio chamado.'],
