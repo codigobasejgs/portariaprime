@@ -22,21 +22,23 @@ export function fromHeader(base: string, displayName?: string | null): string {
 }
 
 /**
- * E-mail: Resend (principal) e Brevo (reserva, outro provedor — não é conta duplicada). A reserva só entra quando o
- * Resend recusa ANTES de aceitar: cota esgotada (429), sem configuração ou 5xx. Timeout/erro de rede depois do envio
- * é ambíguo e não vai para a reserva (evita e-mail duplicado). 422 = destinatário recusado: nenhum provedor resolve.
- * ponytail: decide pela resposta de cada envio, sem contador próprio de cota. Somar contador se a latência do 429 incomodar.
+ * E-mail: Brevo (principal, 300/dia) e Resend (reserva, outro provedor — não é conta duplicada). A reserva só entra quando
+ * o Brevo recusa ANTES de aceitar: cota/limite, sem configuração ou 5xx. Timeout/erro de rede depois do envio é ambíguo
+ * e não vai para a reserva (evita e-mail duplicado). Destinatário recusado (Brevo 400 / Resend 422): nenhum provedor resolve.
+ * O e-mail de senha do Supabase Auth não passa aqui: usa o SMTP do Resend configurado no próprio Auth.
+ * ponytail: decide pela resposta de cada envio, sem contador próprio de cota. Somar contador se a latência do erro incomodar.
  */
 export async function sendEmail(to: string, subject: string, html: string, attachment?: Attachment, senderName?: string | null,
   opts: { text?: string; idempotencyKey?: string } = {}): Promise<SendResult> {
-  const r = await sendResend(to, subject, html, attachment, senderName, opts);
-  if (r.status === 'accepted' || r.permanent || r.ambiguous) return strip(r);
   const b = await sendBrevo(to, subject, html, attachment, senderName, opts);
   if (b.status === 'accepted') return { ...strip(b), ref: `brevo:${b.ref || ''}` };
-  if (b.status === 'disabled') return strip(r);
+  if (b.permanent || b.ambiguous) return strip(b);
+  const r = await sendResend(to, subject, html, attachment, senderName, opts);
+  if (r.status === 'accepted') return strip(r);
+  if (r.status === 'disabled') return strip(b);
   // Sem resposta da reserva: pode ter saído. "ambiguous" faz a fila não repetir sozinha (evita duplicar).
-  if (b.ambiguous) return { status: 'failed', error: `ambiguous: reserva Brevo sem resposta (${b.error}); principal: ${r.error}` };
-  return { status: 'failed', error: `${r.error}; reserva: ${b.error}`, permanent: !!b.permanent && !!r.permanent };
+  if (r.ambiguous) return { status: 'failed', error: `ambiguous: reserva Resend sem resposta (${r.error}); principal: ${b.error}` };
+  return { status: 'failed', error: `${b.error}; reserva: ${r.error}`, permanent: !!b.permanent && !!r.permanent };
 }
 type ProviderResult = SendResult & { ambiguous?: boolean };
 const strip = ({ ambiguous, ...r }: ProviderResult): SendResult => r;
@@ -84,7 +86,10 @@ async function sendBrevo(to: string, subject: string, html: string, attachment?:
       signal: AbortSignal.timeout(15000),
     });
     const d: any = await r.json().catch(() => ({}));
-    return r.ok ? { status: 'accepted', ref: d.messageId } : { status: 'failed', error: `Brevo HTTP ${r.status}${d?.code ? ` ${String(d.code).slice(0, 40)}` : ''}`, permanent: r.status === 400 };
+    if (r.ok) return { status: 'accepted', ref: d.messageId };
+    // 402 = sem créditos/cota, 429 = limite, 401/403 = chave/IP: vai para a reserva. Só destinatário inválido é definitivo.
+    const badRecipient = r.status === 400 && /email|recipient|to\b/i.test(`${d?.code || ''} ${d?.message || ''}`);
+    return { status: 'failed', error: `Brevo HTTP ${r.status}${d?.code ? ` ${String(d.code).slice(0, 40)}` : ''}`, permanent: badRecipient };
   } catch (e: any) {
     return { status: 'failed', error: e?.message || 'rede', ambiguous: true };
   }
