@@ -15,6 +15,8 @@ export const SCREENS = {
   marcaA: { file: '/screens/marca-a-desktop.webp', title: 'Condomínio A', caption: 'Logo e cores próprias do condomínio.', width: 1440, height: 900 },
   marcaB: { file: '/screens/marca-b-desktop.webp', title: 'Condomínio B', caption: 'Outro condomínio, outra identidade, dados separados.', width: 1440, height: 900 },
   moradorQr: { file: '/screens/morador-qr-mobile.webp', title: 'QR de retirada', caption: 'Código de uso único com unidade e encomenda identificadas (desfocado nesta imagem).', width: 390, height: 844 },
+  // Gerada por scripts/capture-demo-screens.mjs a partir de /demonstracao (dados fictícios).
+  envios: { file: '/screens/envios-desktop.webp', title: 'Mensagens enviadas', caption: 'Cada WhatsApp e e-mail com data, unidade, morador, destino e situação; filtros e exportação em CSV, Excel e PDF.', width: 1440, height: 900 },
   assinatura: { file: '/screens/assinatura-desktop.webp', title: 'Mês grátis e plano', caption: 'Início e fim do teste, plano escolhido e valor depois do teste.', width: 1440, height: 900 },
   // Modo Portaria Exclusiva: capturas reais do app Android gerenciado em EMULADOR Android 14 (tests/evidence/emu-*),
   // condomínio de laboratório fictício; código de verificação desfocado. Não são fotos de aparelho físico.

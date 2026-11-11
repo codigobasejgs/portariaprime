@@ -254,13 +254,19 @@ export default function LandingPage() {
         <section id="gestao" className="max-w-6xl mx-auto px-4 py-16 scroll-mt-16" aria-labelledby="gestao-h">
           <h2 id="gestao-h" className="text-3xl font-semibold">Gestão completa para o síndico</h2>
           <p className="text-muted mt-2 max-w-3xl">Da implantação ao dia a dia: traga os dados que você já tem, acompanhe cada aviso enviado e tenha resposta pronta quando um morador perguntar.</p>
-          <div className="mt-8 grid sm:grid-cols-2 gap-4">
-            {MANAGEMENT.map(([I, t, x]) => (
-              <Card key={t} className="flex gap-4">
-                <span className="h-11 w-11 shrink-0 rounded-xl bg-secondary/10 grid place-items-center"><I className="w-5 h-5 text-secondary" aria-hidden /></span>
-                <span><h3 className="font-semibold">{t}</h3><p className="text-sm text-muted mt-1">{x}</p></span>
-              </Card>
-            ))}
+          <div className="mt-8 grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)] gap-6 items-start">
+            <div className="grid gap-4">
+              {MANAGEMENT.map(([I, t, x]) => (
+                <Card key={t} className="flex gap-4">
+                  <span className="h-11 w-11 shrink-0 rounded-xl bg-secondary/10 grid place-items-center"><I className="w-5 h-5 text-secondary" aria-hidden /></span>
+                  <span><h3 className="font-semibold">{t}</h3><p className="text-sm text-muted mt-1">{x}</p></span>
+                </Card>
+              ))}
+            </div>
+            <figure className="lg:sticky lg:top-24">
+              <Shot s={SCREENS.envios} onZoom={setZoom} sizes="(min-width: 1024px) 640px, 100vw" />
+              <figcaption className="mt-2 text-sm"><strong>{SCREENS.envios.title}.</strong> <span className="text-muted">{SCREENS.envios.caption} Tela real com dados de demonstração.</span></figcaption>
+            </figure>
           </div>
         </section>
 
@@ -526,6 +532,11 @@ export default function LandingPage() {
             <a href="/privacidade" onClick={onLink} className="hover:text-porcelain">Privacidade</a>
           </nav>
           <p className="w-full text-xs text-porcelain/50">© Portaria Prime · Pagamentos por InfinitePay. Dados legais da contratada constam no contrato publicado.</p>
+          <p className="w-full border-t border-porcelain/10 pt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-porcelain/60">
+            <span>Desenvolvido por <a href="https://www.codigobase.com.br/" target="_blank" rel="noopener noreferrer" className="font-semibold text-porcelain/80 hover:text-porcelain">Código Base</a></span>
+            <a href="https://wa.me/5511986262240" target="_blank" rel="noopener noreferrer" className="hover:text-porcelain">+55 11 98626-2240</a>
+            <a href="https://instagram.com/codigo.base" target="_blank" rel="noopener noreferrer" className="hover:text-porcelain">@codigo.base</a>
+          </p>
         </div>
       </footer>
 
