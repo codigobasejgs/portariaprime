@@ -21,14 +21,35 @@ export function fromHeader(base: string, displayName?: string | null): string {
   return name ? `"${name} via Portaria Prime" <${addr}>` : base;
 }
 
+/**
+ * E-mail: Resend (principal) e Brevo (reserva, outro provedor — não é conta duplicada). A reserva só entra quando o
+ * Resend recusa ANTES de aceitar: cota esgotada (429), sem configuração ou 5xx. Timeout/erro de rede depois do envio
+ * é ambíguo e não vai para a reserva (evita e-mail duplicado). 422 = destinatário recusado: nenhum provedor resolve.
+ * ponytail: decide pela resposta de cada envio, sem contador próprio de cota. Somar contador se a latência do 429 incomodar.
+ */
 export async function sendEmail(to: string, subject: string, html: string, attachment?: Attachment, senderName?: string | null,
   opts: { text?: string; idempotencyKey?: string } = {}): Promise<SendResult> {
+  const r = await sendResend(to, subject, html, attachment, senderName, opts);
+  if (r.status === 'accepted' || r.permanent || r.ambiguous) return strip(r);
+  const b = await sendBrevo(to, subject, html, attachment, senderName, opts);
+  if (b.status === 'accepted') return { ...strip(b), ref: `brevo:${b.ref || ''}` };
+  if (b.status === 'disabled') return strip(r);
+  // Sem resposta da reserva: pode ter saído. "ambiguous" faz a fila não repetir sozinha (evita duplicar).
+  if (b.ambiguous) return { status: 'failed', error: `ambiguous: reserva Brevo sem resposta (${b.error}); principal: ${r.error}` };
+  return { status: 'failed', error: `${r.error}; reserva: ${b.error}`, permanent: !!b.permanent && !!r.permanent };
+}
+type ProviderResult = SendResult & { ambiguous?: boolean };
+const strip = ({ ambiguous, ...r }: ProviderResult): SendResult => r;
+
+async function sendResend(to: string, subject: string, html: string, attachment?: Attachment, senderName?: string | null,
+  opts: { text?: string; idempotencyKey?: string } = {}): Promise<ProviderResult> {
   const key = optionalEnv('RESEND_API_KEY');
   const base = optionalEnv('RESEND_FROM_EMAIL');
   if (!key || !base) return { status: 'disabled', error: 'Resend não configurado' };
   const from = fromHeader(base, senderName);
+  let r: Response;
   try {
-    const r = await fetch('https://api.resend.com/emails', {
+    r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       // Idempotency-Key: o mesmo job reenviado (retry após timeout) não vira e-mail duplicado no Resend.
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}`, ...(opts.idempotencyKey ? { 'Idempotency-Key': opts.idempotencyKey } : {}) },
@@ -36,11 +57,36 @@ export async function sendEmail(to: string, subject: string, html: string, attac
         ...(attachment ? { attachments: [{ filename: attachment.filename, content: Buffer.from(attachment.content).toString('base64') }] } : {}) }),
       signal: AbortSignal.timeout(15000),
     });
-    const d: any = await r.json().catch(() => ({}));
-    // 422 = endereço/campos recusados: não adianta repetir.
-    return r.ok ? { status: 'accepted', ref: d.id } : { status: 'failed', error: `Resend HTTP ${r.status}`, permanent: r.status === 422 };
   } catch (e: any) {
-    return { status: 'failed', error: e?.message || 'rede' };
+    return { status: 'failed', error: e?.message || 'rede', ambiguous: true };
+  }
+  const d: any = await r.json().catch(() => ({}));
+  if (r.ok) return { status: 'accepted', ref: d.id };
+  // 422 = endereço/campos recusados: não adianta repetir nem trocar de provedor.
+  const reason = d?.name ? ` ${String(d.name).slice(0, 40)}` : '';
+  return { status: 'failed', error: `Resend HTTP ${r.status}${reason}`, permanent: r.status === 422 };
+}
+
+async function sendBrevo(to: string, subject: string, html: string, attachment?: Attachment, senderName?: string | null,
+  opts: { text?: string } = {}): Promise<ProviderResult> {
+  const key = optionalEnv('BREVO_API_KEY');
+  const base = optionalEnv('BREVO_FROM_EMAIL') || optionalEnv('RESEND_FROM_EMAIL');
+  if (!key || !base) return { status: 'disabled', error: 'Brevo não configurado' };
+  const email = base.match(/<([^<>\s]+@[^<>\s]+)>/)?.[1] || base.trim();
+  const name = String(senderName || '').replace(/["<>\\\r\n]/g, '').replace(/\s+/g, ' ').trim().slice(0, 60);
+  try {
+    const r = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', accept: 'application/json', 'api-key': key },
+      body: JSON.stringify({ sender: { email, name: name ? `${name} via Portaria Prime` : 'Portaria Prime' }, to: [{ email: to }], subject, htmlContent: html,
+        ...(opts.text ? { textContent: opts.text } : {}),
+        ...(attachment ? { attachment: [{ name: attachment.filename, content: Buffer.from(attachment.content).toString('base64') }] } : {}) }),
+      signal: AbortSignal.timeout(15000),
+    });
+    const d: any = await r.json().catch(() => ({}));
+    return r.ok ? { status: 'accepted', ref: d.messageId } : { status: 'failed', error: `Brevo HTTP ${r.status}${d?.code ? ` ${String(d.code).slice(0, 40)}` : ''}`, permanent: r.status === 400 };
+  } catch (e: any) {
+    return { status: 'failed', error: e?.message || 'rede', ambiguous: true };
   }
 }
 
