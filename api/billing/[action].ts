@@ -10,7 +10,7 @@ import { POST as reconcile } from './_reconcile.js';
 import { contractAction } from './_contract.js';
 
 const action = (r: Request) => new URL(r.url).pathname.split('/').pop();
-const CONTRACT = new Set(['contract_accept', 'contract_verify', 'contract_code', 'contract_pdf', 'contract_resend']);
+const CONTRACT = new Set(['contract_accept', 'contract_verify', 'contract_code', 'contract_pdf', 'contract_resend', 'contract_sync', 'contract_signed_pdf', 'contract_original_pdf']);
 
 export const POST = handler(async (request) => {
   const a = action(request);

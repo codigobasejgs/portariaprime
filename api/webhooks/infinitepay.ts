@@ -11,8 +11,12 @@ import { handler, json, readJson } from '../_lib/http.js';
 import { serviceClient } from '../_lib/supabase.js';
 import { parseWebhook } from '../_lib/infinitepay.js';
 import { verifyAndApply } from '../_lib/payments.js';
+import { autentiqueWebhook } from './_autentique.js';
 
 export const POST = handler(async (request) => {
+  // /api/webhooks/autentique chega aqui pelo rewrite do vercel.json (limite de funções da Vercel).
+  const u = new URL(request.url);
+  if (u.searchParams.get('a') === 'autentique' || u.pathname.endsWith('/autentique')) return autentiqueWebhook(request);
   const raw = await readJson(request, 16 * 1024).catch(() => null);
   const evt = parseWebhook(raw);
   if (!evt) return json({ ok: false }, 400);

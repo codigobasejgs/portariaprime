@@ -16,6 +16,7 @@ import { optionalEnv } from '../_lib/env.js';
 import { sendEmail } from '../_lib/channels.js';
 import { esc } from '../_lib/templates.js';
 import { renderContractPdf } from '../_lib/contract-pdf.js';
+import { sendForSignature, syncSignature } from '../_lib/contract-sign.js';
 
 const str = (v: unknown, min: number, max: number, label: string) => {
   const s = typeof v === 'string' ? v.trim() : '';
@@ -43,8 +44,11 @@ export function parseAcceptInput(b: any) {
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new HttpError(400, 'E-mail do representante inválido.');
   const phone = digits(b.representativePhone);
   if (phone && (phone.length < 10 || phone.length > 13)) throw new HttpError(400, 'Telefone do representante inválido.');
+  // v1.0 (assinatura na Autentique): endereço, CPF e WhatsApp do síndico obrigatórios.
+  const contractorAddress = typeof b.contractorAddress === 'string' && b.contractorAddress.trim() ? str(b.contractorAddress, 10, 300, 'Endereço do condomínio') : null;
+  if (contractorAddress && (!cpf || !phone)) throw new HttpError(400, 'Informe CPF e WhatsApp do síndico para assinar o contrato.');
   return {
-    tenantId: b.tenantId as string, documentSha256: b.documentSha256 as string, plan, cycle, proposal,
+    tenantId: b.tenantId as string, documentSha256: b.documentSha256 as string, plan, cycle, proposal, contractorAddress,
     contractorName: str(b.contractorName, 2, 200, 'Nome do contratante'), contractorDocument,
     representativeName: str(b.representativeName, 3, 160, 'Nome do representante'), representativeCpf: cpf || null,
     representativeEmail: email, representativePhone: phone || null,
@@ -99,10 +103,11 @@ export async function contractAction(action: string, request: Request): Promise<
 
   if (action === 'contract_accept') {
     const i = parseAcceptInput(body);
-    const { data, error } = await svc.rpc('contract_accept', {
+    const { data, error } = await svc.rpc(i.contractorAddress ? 'contract_accept_v2' : 'contract_accept', {
       p_actor: user.id, p_tenant: i.tenantId, p_document_sha256: i.documentSha256, p_accepted: true,
       p_plan_code: i.plan, p_cycle: i.cycle, p_proposal: i.proposal,
       p_contractor_name: i.contractorName, p_contractor_document: i.contractorDocument,
+      ...(i.contractorAddress ? { p_contractor_address: i.contractorAddress } : {}),
       p_rep_name: i.representativeName, p_rep_cpf: i.representativeCpf, p_rep_email: i.representativeEmail, p_rep_phone: i.representativePhone,
       p_rep_role: i.representativeRole, p_rep_authority: i.representativeAuthority,
       p_ip: clientIp(request), p_user_agent: (request.headers.get('user-agent') || '').slice(0, 400) || null,
@@ -111,6 +116,15 @@ export async function contractAction(action: string, request: Request): Promise<
     // O aceite já está registrado; falha no PDF é recuperável por /contract_pdf.
     let pdf: { sha256: string } | null = null;
     try { pdf = await ensureContractPdf(svc, data.id); } catch (e: any) { console.error('[contract_pdf]', e?.message || e); }
+    // v1.0: a assinatura na Autentique confirma o síndico (o link vai ao e-mail dele); sem código por e-mail.
+    if (i.contractorAddress) {
+      const sign = await sendForSignature(svc, data.id);
+      return json({ acceptanceId: data.id, status: data.status, kind: data.kind, acceptedAt: data.accepted_at, documentVersion: data.document_version,
+        documentSha256: data.document_sha256, terms: data.terms, pdfSha256: pdf?.sha256 || null, signature: sign, verification: 'autentique',
+        message: sign.status === 'awaiting_signatures' ? 'Contrato enviado para assinatura na Autentique. O link também foi enviado ao e-mail do síndico.'
+          : sign.status === 'not_configured' ? 'Aceite registrado. A assinatura eletrônica ainda não está configurada; a Portaria Prime enviará o link de assinatura.'
+          : 'Aceite registrado, mas o envio para assinatura falhou. Use "Atualizar status" em instantes.' });
+    }
     const verification = await sendCode(svc, user.id, data.id, data.representative_email);
     return json({ acceptanceId: data.id, status: data.status, kind: data.kind, acceptedAt: data.accepted_at, documentVersion: data.document_version,
       documentSha256: data.document_sha256, terms: data.terms, pdfSha256: pdf?.sha256 || null, verification, message: VERIFY_MSG[verification] });
@@ -136,6 +150,24 @@ export async function contractAction(action: string, request: Request): Promise<
     if (error) rpcError(error);
     const path = data.status === 'ready' ? data.path : (await ensureContractPdf(svc, id)).path;
     const { data: s, error: se } = await svc.storage.from('tenant-contracts').createSignedUrl(path, 300, { download: `contrato-portaria-prime-${id.slice(0, 8)}.pdf` });
+    if (se || !s) throw new HttpError(502, 'Não foi possível abrir o PDF agora.');
+    return json({ url: s.signedUrl });
+  }
+  // "Já assinei / Atualizar status": consulta a Autentique agora (reenvia se o primeiro envio falhou).
+  if (action === 'contract_sync') {
+    const { data, error } = await svc.rpc('contract_file_access', { p_actor: user.id, p_acceptance: id });
+    if (error) rpcError(error);
+    if (!data.autentique_document_id) return json(await sendForSignature(svc, id));
+    try { return json(await syncSignature(svc, id)); }
+    catch (e: any) { console.error('[autentique.sync]', e?.message || e); throw new HttpError(502, 'Não foi possível consultar a Autentique agora. Tente em instantes.'); }
+  }
+  if (action === 'contract_signed_pdf' || action === 'contract_original_pdf') {
+    const { data, error } = await svc.rpc('contract_file_access', { p_actor: user.id, p_acceptance: id });
+    if (error) rpcError(error);
+    const signed = action === 'contract_signed_pdf';
+    const path = signed ? data.signed_pdf_path : data.pdf_path;
+    if (!path) throw new HttpError(409, signed ? 'O PDF assinado pelas duas partes ainda não está disponível.' : 'O PDF ainda está sendo gerado.');
+    const { data: s, error: se } = await svc.storage.from('tenant-contracts').createSignedUrl(path, 300, { download: `contrato-${signed ? 'assinado-' : ''}${id.slice(0, 8)}.pdf` });
     if (se || !s) throw new HttpError(502, 'Não foi possível abrir o PDF agora.');
     return json({ url: s.signedUrl });
   }

@@ -58,7 +58,8 @@ function LegalPage({ kind }: { kind: LegalKind }) {
             <div className="space-y-2">
               <h1 className="text-2xl sm:text-3xl font-semibold">{LEGAL_LABEL[kind]}</h1>
               <p className="text-sm text-muted">Versão {doc.version}{st.published && doc.effective_from ? ` · vigente desde ${dateOnly(doc.effective_from)}` : ''}</p>
-              {!st.published && <Alert tone="warning"><strong>Minuta em revisão — não vigente.</strong> Este texto ainda não foi aprovado juridicamente nem publicado; campos marcados como "a definir" dependem de dados da empresa ainda não cadastrados.</Alert>}
+              {kind === 'contrato_saas' ? <Alert>Modelo oficial. Os campos destacados (condomínio, síndico e plano) são preenchidos automaticamente com os dados informados no momento da contratação, e o contrato é assinado eletronicamente pelas duas partes na Autentique.</Alert>
+                : !st.published && <Alert tone="warning"><strong>Minuta em revisão — não vigente.</strong> Este texto ainda não foi aprovado juridicamente nem publicado; campos marcados como "a definir" dependem de dados da empresa ainda não cadastrados.</Alert>}
             </div>
             {doc.summary && <section className="rounded-2xl border border-line bg-surface-2 p-4" aria-label="Resumo em linguagem simples">
               <p className="font-semibold mb-1">Resumo em linguagem simples</p><p className="text-sm">{doc.summary}</p>

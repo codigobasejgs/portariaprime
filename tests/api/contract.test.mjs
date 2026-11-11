@@ -81,36 +81,39 @@ test('PDF do contrato: arquivo real com texto longo e caractere fora da fonte', 
   assert.ok(bytes.length > 2000);
 });
 
-test('minutas: versão rascunho (contrato 0.2 com Modo Portaria Exclusiva), marcadores pendentes (não publicáveis) e nenhum CNPJ/dado da contratada inventado', async () => {
+test('documentos: contrato oficial v1.0 (só campos do condomínio/plano em aberto); termos/privacidade/anexo seguem em rascunho sem dado inventado', async () => {
   const { readFileSync } = await import('node:fs');
   const { parseDraft, pendingMarks, headings, lineDiff } = await import('../../src/lib/legal-text.ts');
-  for (const f of ['contrato-saas', 'termos', 'privacidade', 'anexo-tratamento-dados']) {
+  for (const f of ['termos', 'privacidade', 'anexo-tratamento-dados']) {
     const { meta, body } = parseDraft(readFileSync(`docs/legal/${f}.md`, 'utf8'));
-    assert.equal(meta.version, f === 'contrato-saas' ? '0.2-rascunho' : '0.1-rascunho', f);
+    assert.equal(meta.version, '0.1-rascunho', f);
     assert.ok(meta.summary && pendingMarks(body).length > 0, `${f}: resumo e pendências`);
     assert.doesNotMatch(body, /\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/, `${f}: sem CNPJ literal`);
     assert.ok(headings(body).length >= 3);
   }
-  const contrato = readFileSync('docs/legal/contrato-saas.md', 'utf8');
-  for (const re of [/MP 2\.200-2\/2001, art\. 10, §2º/, /não é a API oficial da Meta/, /um mês de calendário/, /sem débito automático/i, /\{\{FORO\}\}/, /\{\{HORARIO_SUPORTE\}\}/])
+  const { meta, body: contrato } = parseDraft(readFileSync('docs/legal/contrato-saas.md', 'utf8'));
+  assert.equal(meta.version, '1.0');
+  // Os únicos marcadores são os preenchidos por aceite (dados do condomínio, síndico, plano e assinatura).
+  assert.deepEqual(pendingMarks(contrato).filter((m) => !/^\{\{(CONDOMINIO|SINDICO|PLANO|DATA|DIA|TAXA|AUTENTIQUE|CONTRACT)_/.test(m)), []);
+  for (const re of [/MP|Medida Provisória nº 2\.200-2\/2001/, /Lei nº 14\.063\/2020/, /30 \(trinta\) dias corridos/, /InfinitePay/, /Autentique/, /Foro Central da Comarca da Capital do Estado de São Paulo/])
     assert.match(contrato, re);
-  assert.doesNotMatch(contrato, /garant\w+ (a )?validade jurídica/i);
-  // Modo Portaria Exclusiva: opcional, piloto, sem equipamento, provisionamento e sem reajuste de quem já contratou.
-  for (const re of [/Modo Portaria Exclusiva/, /uso opcional/, /equipamento não está incluso/, /validação de compatibilidade/, /restauração de fábrica/, /sem reajuste automático/])
+  // Modo Portaria Exclusiva: opcional, piloto, aparelhos compatíveis e restauração de fábrica.
+  for (const re of [/Modo Portaria Exclusiva/, /estritamente opcional/, /caráter piloto/, /homologados/, /RESTAURAÇÃO DE FÁBRICA/])
     assert.match(contrato, re);
   assert.doesNotMatch(contrato, /qualquer (aparelho|android)|100% inviolável|segurança total|impossível sair/i);
   assert.deepEqual(lineDiff('a\nb\nc', 'a\nx\nc').map(l => l.op + l.text), [' a', '-b', '+x', ' c']);
 });
 
-test('/contratar e /planos: sem contrato publicado, avisam que a contratação eletrônica só existe após publicação e que o aceite não foi feito', async () => {
+test('/contratar, /planos e /contrato: contrato oficial v1.0 sem aviso de minuta; sem publicação ainda não há aceite', async () => {
   const { readFileSync } = await import('node:fs');
   const contratar = readFileSync('src/pages/ContratarPage.tsx', 'utf8');
   assert.match(contratar, /!quote\.document \? <Alert[^>]*>O contrato ainda não foi publicado[^<]*A contratação eletrônica fica disponível após a publicação\./);
+  for (const k of ['contractorAddress', 'representativeCpf', 'representativePhone']) assert.match(contratar, new RegExp(`required[^>]*value=\\{form\\.${k}\\}`), k);
   const planos = readFileSync('src/pages/PlanosPage.tsx', 'utf8');
-  assert.match(planos, /!legal\.published && <Alert[^>]*><strong>Minuta em revisão — não vigente\.<\/strong>/);
-  assert.match(planos, /!legal\?\.published && <> <strong>O aceite ainda não foi feito:<\/strong> a contratação eletrônica só fica disponível depois que a Portaria Prime publicar/);
-  assert.match(planos, /!legal\.published && ' Enquanto o contrato estiver em minuta, a contratação eletrônica não está disponível e nenhum aceite é registrado\.'/);
-  assert.match(planos, /não substitui o aceite formal/);
+  assert.doesNotMatch(planos, /Minuta em revisão|em minuta/);
+  assert.match(planos, /não substitui o contrato assinado/);
+  const legal = readFileSync('src/pages/LegalPages.tsx', 'utf8');
+  assert.match(legal, /kind === 'contrato_saas' \? <Alert>Modelo oficial\. Os campos destacados/);
 });
 
 test('template contract_copy escapa dados e cita versão/hash', () => {

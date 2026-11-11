@@ -11,6 +11,7 @@ import { Markdown } from '../lib/legal';
 import { Alert, Badge, Button, Card, Field, Input, Select, Spinner } from '../components/ui';
 import { PortariaPrimeLogo } from '../components/Brand';
 import { KIOSK } from '../lib/kiosk-offer';
+import { SignaturePanel } from '../components/SignaturePanel';
 
 const LIMIT: Record<string, string> = { max_units: 'Unidades', max_concierges: 'Portarias', ocr_monthly: 'Leituras OCR por mês', whatsapp_monthly: 'Mensagens de WhatsApp por mês', storage_mb: 'Armazenamento (MB)' };
 
@@ -22,6 +23,16 @@ type Quote = {
   active: { id: string; document_version: string; accepted_at: string } | null;
 };
 
+/** Prévia na tela com os dados digitados (o texto oficial é preenchido de novo no servidor, com os dados do banco). */
+function previewContract(md: string, f: Record<string, string>, t: Quote['terms']) {
+  const v: Record<string, string> = {
+    CONDOMINIO_NOME: f.contractorName, CONDOMINIO_CNPJ: f.contractorDocument, CONDOMINIO_ENDERECO: f.contractorAddress,
+    SINDICO_NOME: f.representativeName, SINDICO_CPF: f.representativeCpf, SINDICO_EMAIL: f.representativeEmail, SINDICO_TELEFONE: f.representativePhone,
+    PLANO_NOME: t.plan_name, PLANO_VALOR_MENSAL: (t.amount_cents / 100 / ({ monthly: 1, quarterly: 3, yearly: 12 } as Record<string, number>)[t.cycle]).toLocaleString('pt-BR', { minimumFractionDigits: 2 }),
+  };
+  return md.replace(/\{\{([A-Z0-9_]+)\}\}/g, (m, k) => (v[k]?.trim() ? `**${v[k].trim()}**` : m));
+}
+
 export default function ContratarPage() {
   const { ctx } = useSession();
   const plan = query('plano'); const cycle = query('ciclo') || 'monthly'; const proposal = query('proposta');
@@ -31,7 +42,7 @@ export default function ContratarPage() {
   const [error, setError] = useState<string | null>(null);
   const [read, setRead] = useState(false);
   const [agree, setAgree] = useState(false);
-  const [form, setForm] = useState({ contractorName: '', contractorDocument: '', representativeName: '', representativeCpf: '',
+  const [form, setForm] = useState({ contractorName: '', contractorDocument: '', contractorAddress: '', representativeName: '', representativeCpf: '',
     representativeEmail: ctx?.email || '', representativePhone: '', representativeRole: 'Síndico(a)', representativeAuthority: '' });
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<any>(null);
@@ -112,14 +123,14 @@ export default function ContratarPage() {
               <p className="text-sm text-muted">Cancelamento: pelo próprio sistema, a qualquer momento, sem falar com o comercial. O acesso continua até o fim do período já liberado; depois fica restrito a consulta e exportação. Atraso não apaga provas de entrega.</p>
               {quote.active && <Alert tone="warning">Este condomínio já tem contrato vigente (versão {quote.active.document_version}, aceito em {dateTime(quote.active.accepted_at)}). Um novo aceite será registrado como aditivo, ligado ao anterior.</Alert>}
             </Card>
-            {!quote.document ? <Alert tone="warning">O contrato ainda não foi publicado pela Portaria Prime (minuta em revisão jurídica). A contratação eletrônica fica disponível após a publicação. <a href="/contrato" onClick={onLink} className="underline">Ler a minuta</a>.</Alert> : (
+            {!quote.document ? <Alert tone="warning">O contrato ainda não foi publicado pela Portaria Prime. A contratação eletrônica fica disponível após a publicação. <a href="/contrato" onClick={onLink} className="underline">Ler o modelo do contrato</a>.</Alert> : (
               <form onSubmit={submit} className="space-y-5">
                 <Card className="space-y-2">
                   <p className="font-semibold">Contrato — versão {quote.document.version}</p>
                   {quote.document.summary && <p className="text-sm text-muted">{quote.document.summary}</p>}
                   <div tabIndex={0} aria-label="Texto completo do contrato" className="max-h-[60vh] overflow-y-auto rounded-xl border border-line p-4"
                     onScroll={(e) => { const el = e.currentTarget; if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) setRead(true); }}>
-                    <Markdown md={quote.document.content_md} />
+                    <Markdown md={previewContract(quote.document.content_md, form, t!)} />
                   </div>
                   <p className="text-xs text-muted break-all">SHA-256 do texto exibido: {quote.document.sha256}</p>
                 </Card>
@@ -127,10 +138,11 @@ export default function ContratarPage() {
                   <p className="font-semibold sm:col-span-2">Contratante e representante</p>
                   <Field label="Nome do condomínio"><Input required maxLength={200} value={form.contractorName} onChange={set('contractorName')} /></Field>
                   <Field label="CNPJ do condomínio (ou CPF do responsável)"><Input required inputMode="numeric" value={form.contractorDocument} onChange={set('contractorDocument')} /></Field>
-                  <Field label="Nome completo do representante"><Input required maxLength={160} value={form.representativeName} onChange={set('representativeName')} /></Field>
-                  <Field label="CPF do representante (opcional)"><Input inputMode="numeric" value={form.representativeCpf} onChange={set('representativeCpf')} /></Field>
-                  <Field label="E-mail do representante" hint="Receberá o código de confirmação e a cópia do contrato."><Input required type="email" value={form.representativeEmail} onChange={set('representativeEmail')} /></Field>
-                  <Field label="Telefone (opcional)"><Input type="tel" value={form.representativePhone} onChange={set('representativePhone')} /></Field>
+                  <div className="sm:col-span-2"><Field label="Endereço do condomínio" hint="Logradouro, número, bairro, cidade/UF e CEP."><Input required minLength={10} maxLength={300} autoComplete="street-address" value={form.contractorAddress} onChange={set('contractorAddress')} /></Field></div>
+                  <Field label="Nome completo do síndico/representante"><Input required maxLength={160} autoComplete="name" value={form.representativeName} onChange={set('representativeName')} /></Field>
+                  <Field label="CPF do síndico/representante"><Input required inputMode="numeric" value={form.representativeCpf} onChange={set('representativeCpf')} /></Field>
+                  <Field label="E-mail do síndico" hint="Receberá o link de assinatura na Autentique e o contrato assinado."><Input required type="email" autoComplete="email" value={form.representativeEmail} onChange={set('representativeEmail')} /></Field>
+                  <Field label="WhatsApp do síndico com DDD"><Input required type="tel" autoComplete="tel" value={form.representativePhone} onChange={set('representativePhone')} /></Field>
                   <Field label="Cargo"><Input required maxLength={120} value={form.representativeRole} onChange={set('representativeRole')} /></Field>
                   <Field label="Poderes para contratar" hint="Ex.: síndico eleito em assembleia de 10/03/2026; procuração de …"><Input required maxLength={300} value={form.representativeAuthority} onChange={set('representativeAuthority')} /></Field>
                 </Card>
@@ -140,8 +152,8 @@ export default function ContratarPage() {
                     <input type="checkbox" className="mt-1 w-5 h-5" checked={agree} disabled={!read} onChange={(e) => setAgree(e.target.checked)} />
                     <span className="text-sm">Li o contrato versão {quote.document.version}, declaro ter poderes para contratar em nome de {tenant?.name} e aceito as condições acima.</span>
                   </label>
-                  <p className="text-xs text-muted">Registramos data e hora do servidor, sua conta, IP e navegador como prova do aceite. Não é assinatura digital ICP-Brasil.</p>
-                  <Button type="submit" loading={busy} disabled={!agree}>Aceitar contrato</Button>
+                  <p className="text-xs text-muted">Ao continuar, o contrato é preenchido com estes dados e enviado para assinatura eletrônica das duas partes na Autentique. Registramos data e hora do servidor, sua conta, IP e navegador.</p>
+                  <Button type="submit" loading={busy} disabled={!agree}>Aceitar e gerar contrato para assinatura</Button>
                 </Card>
               </form>
             )}
@@ -150,9 +162,10 @@ export default function ContratarPage() {
             <p className="font-semibold text-lg">Aceite registrado</p>
             <p className="text-sm">Registro {result.acceptanceId} · versão {result.documentVersion} · {dateTime(result.acceptedAt)} (horário do servidor)</p>
             <p className="text-xs text-muted break-all">SHA-256 do documento: {result.documentSha256}{result.pdfSha256 ? ` · SHA-256 do PDF: ${result.pdfSha256}` : ''}</p>
-            <Badge tone={result.status === 'active' ? 'success' : 'warning'}>{result.status === 'active' ? 'Contrato vigente' : 'Aguardando confirmação do e-mail do representante'}</Badge>
+            {result.verification !== 'autentique' && <Badge tone={result.status === 'active' ? 'success' : 'warning'}>{result.status === 'active' ? 'Contrato vigente' : 'Aguardando confirmação do e-mail do representante'}</Badge>}
             {verifyMsg && <Alert tone={result.verification === 'unavailable' ? 'warning' : 'info'}>{verifyMsg}</Alert>}
-            {result.status === 'pending_verification' && result.verification !== 'unavailable' && <div className="flex flex-wrap gap-2 items-end">
+            {result.verification === 'autentique' && <SignaturePanel acceptanceId={result.acceptanceId} tenantId={tenantId} />}
+            {result.status === 'pending_verification' && result.verification !== 'unavailable' && result.verification !== 'autentique' && <div className="flex flex-wrap gap-2 items-end">
               <Field label="Código de 6 dígitos"><Input inputMode="numeric" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} /></Field>
               <Button onClick={verify} loading={busy} disabled={code.length !== 6}>Confirmar</Button>
               <Button variant="ghost" onClick={newCode} loading={busy}>Enviar novo código</Button>

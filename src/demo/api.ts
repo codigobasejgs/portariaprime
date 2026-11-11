@@ -1,7 +1,7 @@
 import { renderReceiptPdf } from '../../api/_lib/receipt-pdf';
 import { TENANT } from './mode';
 import { store, uid } from './store';
-import { myUnits } from './rpc';
+import { DEMO_SIG, demoSignature, myUnits } from './rpc';
 import { COURIER_HANDLERS } from './rpc-couriers';
 
 /** Local stand-in for /api/* on /demonstracao. Unlisted paths fail closed. */
@@ -48,6 +48,13 @@ export async function demoApi<T = any>(path: string, body: any = {}): Promise<T>
         snapshot: r!.snapshot as any,
       }, { signature: await bytes(r!.snapshot.signature_path), photo: await bytes(r!.snapshot.handover_path) });
       return { status: 'ready', url: URL.createObjectURL(new Blob([pdf as BlobPart], { type: 'application/pdf' })) } as T;
+    }
+    case '/api/billing/contract_sync': {
+      // "Já assinei": simula a assinatura do síndico e, na consulta seguinte, a da Contratada.
+      if (role !== 'admin') fail('Sem permissão.');
+      const now = new Date().toISOString();
+      if (!DEMO_SIG.contractor) DEMO_SIG.contractor = now; else if (!DEMO_SIG.owner) DEMO_SIG.owner = now;
+      return demoSignature() as T;
     }
     case '/api/team/resident-reset': {
       if (role !== 'admin') fail('Sem permissão.');

@@ -61,6 +61,15 @@ function freeSlot() {
   return STORAGE.filter((s) => s.active).sort((x, y) => Number(x.is_contingency) - Number(y.is_contingency) || x.sort_order - y.sort_order).find((s) => used(s.id) < s.capacity);
 }
 
+/** Estado da assinatura fictícia: o síndico "assina" pelo botão; a Contratada assina logo depois. */
+export const DEMO_SIG = { contractor: null as string | null, owner: null as string | null };
+export function demoSignature() {
+  const s = DEMO_SIG;
+  return { acceptance_id: '00000000-0000-4000-8000-000000000999', contract_status: s.contractor && s.owner ? 'fully_signed' : s.contractor ? 'signed_by_contractor' : 'awaiting_signatures',
+    contractor_signed_at: s.contractor, owner_signed_at: s.owner, fully_signed_at: s.contractor && s.owner ? s.owner : null, rejected_reason: null,
+    has_signed_pdf: false, sign_url: null, sandbox: true, last_error: null };
+}
+
 const CORE: Record<string, Handler> = {
   my_context: () => ({
     user_id: store.userId, email: store.user.email, email_verified: true, platform_admin: false,
@@ -71,6 +80,12 @@ const CORE: Record<string, Handler> = {
     entitlements: { feature_ocr: true, feature_whatsapp: false, feature_totem: true, feature_reports_plus: true, max_units: 50 } }; },
   access_requests_pending_count: (a) => { tenant(a); return store.s.requests.filter((r) => r.status === 'pending').length; },
   staff_login_accounts_list: () => [],
+  // Contrato fictício: assinatura bilateral simulada em memória (nunca chama a Autentique).
+  contract_signature_status: (a) => { tenant(a); return [demoSignature()]; },
+  contract_overview: (a) => { tenant(a); return { state: DEMO_SIG.contractor ? 'active' : 'none', current_version: '1.0', needs_new_acceptance: false, can_manage: false,
+    acceptances: [{ id: '00000000-0000-4000-8000-000000000999', kind: 'original', status: DEMO_SIG.contractor ? 'active' : 'pending_verification', document_version: '1.0',
+      terms: { plan_name: 'Profissional', cycle: 'monthly', amount_cents: 16900 }, representative_name: 'Carla Mendes', representative_email: 'si•••@exemplo.invalid',
+      accepted_at: new Date(Date.now() - 3600_000).toISOString(), email_verified_at: DEMO_SIG.contractor, copy_status: null }] }; },
   access_incomplete_signups: () => [],
 
   my_notifications: (a) => {

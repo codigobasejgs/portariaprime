@@ -2,7 +2,8 @@
 // (draft → review → approved → published), prévia, diff simples e aceites com evidências mascaradas.
 // Leitura exige capacidade `legal`; ações, `legal_manage` (MFA quando configurado) — validado no servidor.
 import React, { useEffect, useState } from 'react';
-import { friendly, rpc } from '../../lib/api';
+import { api, friendly, rpc } from '../../lib/api';
+import { SIG_LABEL } from '../../components/SignaturePanel';
 import { brl, dateTime } from '../../lib/format';
 import { DRAFT_KINDS, draftDoc, LegalKind, LEGAL_LABEL, Markdown } from '../../lib/legal';
 import { lineDiff } from '../../lib/legal-text';
@@ -69,6 +70,39 @@ function GlobalPrivacyTerm({ canManage }: { canManage: boolean }) {
   </Card>;
 }
 
+/** Contratos enviados à Autentique: assinar como Contratada, status das duas partes e PDFs. */
+function OwnerSignatures() {
+  const [rows, setRows] = useState<any[] | null>(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState<string | null>(null);
+  const load = () => rpc<any[]>('platform_contract_signatures').then(setRows).catch((e) => setError(friendly(e)));
+  useEffect(() => { void load(); }, []);
+  const act = async (id: string, fn: () => Promise<void>) => {
+    setBusy(id); setError('');
+    try { await fn(); } catch (e) { setError(friendly(e)); } finally { setBusy(null); }
+  };
+  const open = (path: string, id: string) => act(id, async () => { location.href = (await api(path, { acceptanceId: id })).url; });
+  return <Card className="space-y-3">
+    <h3 className="font-semibold">Assinaturas na Autentique</h3>
+    <p className="text-sm text-muted">Cada contrato precisa da assinatura do condomínio e da Portaria Prime (Contratada). O e-mail de aviso chega quando o condomínio assina.</p>
+    {error && <Alert tone="danger">{error}</Alert>}
+    {!rows ? <Spinner /> : rows.length === 0 ? <p className="text-sm">Nenhum contrato enviado para assinatura.</p> : <ul className="divide-y divide-line">
+      {rows.map((r) => { const [label, tone] = SIG_LABEL[r.contract_status] || [r.contract_status, 'neutral']; return <li key={r.acceptance_id} className="py-3 space-y-2 text-sm">
+        <div className="flex flex-wrap items-center gap-2"><strong>{r.tenant_name}</strong><span>v{r.document_version} · {r.plan}</span><Badge tone={tone}>{label}</Badge>{r.sandbox && <Badge tone="neutral">sandbox</Badge>}</div>
+        <p className="text-xs text-muted">Condomínio: {r.contractor_signed_at ? dateTime(r.contractor_signed_at) : 'pendente'} · Contratada: {r.owner_signed_at ? dateTime(r.owner_signed_at) : 'pendente'}{r.autentique_document_id ? ` · Autentique ${r.autentique_document_id}` : ''}</p>
+        {r.rejected_reason && <Alert tone="danger">{r.rejected_reason}</Alert>}
+        {r.last_error && <Alert tone="warning">{r.last_error}</Alert>}
+        <div className="flex flex-wrap gap-2">
+          {r.owner_sign_url && <a href={r.owner_sign_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center rounded-xl px-4 min-h-11 bg-primary text-primary-fg font-semibold">Assinar como Contratada (Autentique)</a>}
+          {r.contract_status !== 'fully_signed' && <Button variant="secondary" loading={busy === r.acceptance_id} onClick={() => act(r.acceptance_id, async () => { await api('/api/billing/contract_sync', { acceptanceId: r.acceptance_id }); await load(); })}>Atualizar status</Button>}
+          {r.has_pdf && <Button variant="ghost" loading={busy === r.acceptance_id} onClick={() => open('/api/billing/contract_original_pdf', r.acceptance_id)}>PDF original</Button>}
+          {r.has_signed_pdf && <Button variant="ghost" loading={busy === r.acceptance_id} onClick={() => open('/api/billing/contract_signed_pdf', r.acceptance_id)}>PDF assinado</Button>}
+        </div>
+      </li>; })}
+    </ul>}
+  </Card>;
+}
+
 export default function LegalPanel({ canManage }: { canManage: boolean }) {
   const [status, setStatus] = useState<any>(null);
   const [docs, setDocs] = useState<any[] | null>(null);
@@ -129,6 +163,8 @@ export default function LegalPanel({ canManage }: { canManage: boolean }) {
     </Card>}
 
     <GlobalPrivacyTerm canManage={canManage} />
+
+    <OwnerSignatures />
 
     {accs && <Card className="space-y-3">
       <h3 className="font-semibold">Aceites de contrato</h3>

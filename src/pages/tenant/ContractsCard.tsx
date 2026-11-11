@@ -7,11 +7,12 @@ import { brl, CYCLE_LABEL, dateTime } from '../../lib/format';
 import { navigate } from '../../lib/router';
 import { useTenant } from '../../lib/tenant';
 import { Alert, Badge, Button, Card, Modal, Spinner, useAction } from '../../components/ui';
+import { SignatureRow, type SigRow } from '../../components/SignaturePanel';
 
 const STATE: Record<string, [string, 'success' | 'warning' | 'neutral' | 'danger']> = {
   none: ['Sem contrato aceito', 'neutral'], active: ['Vigente', 'success'], ending: ['Encerramento agendado', 'warning'], ended: ['Encerrado', 'neutral'],
 };
-const ACC: Record<string, string> = { pending_verification: 'Aguardando confirmação do e-mail', active: 'Vigente', superseded: 'Substituído por aditivo', ended: 'Encerrado' };
+const ACC: Record<string, string> = { pending_verification: 'Aguardando assinatura do síndico', active: 'Vigente', superseded: 'Substituído por aditivo', ended: 'Encerrado' };
 const COPY: Record<string, string> = { queued: 'Na fila', sending: 'Enviando', accepted: 'Enviada', delivered: 'Entregue', failed: 'Falhou', disabled: 'Envio não configurado' };
 
 export function ContractsCard() {
@@ -23,9 +24,11 @@ export function ContractsCard() {
   const [ver, setVer] = useState(0);
   const { busy, run } = useAction();
 
+  const [sigs, setSigs] = useState<Record<string, SigRow>>({});
   useEffect(() => {
     let on = true;
     rpc('contract_overview', { p_tenant: t.tenant.id }).then((d) => on && setOv(d)).catch((e) => on && setErr(e.message));
+    rpc<SigRow[]>('contract_signature_status', { p_tenant: t.tenant.id }).then((r) => on && setSigs(Object.fromEntries(r.map((s) => [s.acceptance_id, s])))).catch(() => {});
     return () => { on = false; };
   }, [t.tenant.id, ver]);
 
@@ -52,7 +55,8 @@ export function ContractsCard() {
             <span>{a.kind === 'aditivo' ? 'Aditivo' : 'Contrato'} v{a.document_version} · {a.terms?.plan_name} · {CYCLE_LABEL[a.terms?.cycle] || a.terms?.cycle} · {brl(a.terms?.amount_cents || 0)}</span>
             <Badge tone={a.status === 'active' ? 'success' : a.status === 'pending_verification' ? 'warning' : 'neutral'}>{ACC[a.status] || a.status}</Badge>
           </div>
-          <p className="text-xs text-muted">Aceito em {dateTime(a.accepted_at, tz)} por {a.representative_name} ({a.representative_email}) · cópia: {COPY[a.copy_status] || 'não enviada'}</p>
+          <p className="text-xs text-muted">Aceito em {dateTime(a.accepted_at, tz)} por {a.representative_name} ({a.representative_email}){sigs[a.id] ? '' : ` · cópia: ${COPY[a.copy_status] || 'não enviada'}`}</p>
+          {sigs[a.id] && <SignatureRow s={sigs[a.id]} onChange={() => setVer((v) => v + 1)} />}
           <div className="flex flex-wrap gap-2">
             <Button variant="ghost" loading={busy} onClick={() => pdf(a.id)}>Baixar PDF</Button>
             {ov.can_manage && a.email_verified_at && <Button variant="ghost" loading={busy} onClick={() => run(async () => { await api('/api/billing/contract_resend', { acceptanceId: a.id }); setVer((v) => v + 1); }, 'Cópia reenviada (mesmo PDF).')}>Reenviar cópia</Button>}

@@ -27,6 +27,15 @@ export function draftDoc(kind: LegalKind): LegalDoc | null {
 }
 export const DRAFT_KINDS = Object.keys(RAW) as LegalKind[];
 
+/** Campos preenchidos na contratação (aparecem com o nome no modelo público). */
+const CLIENT_FIELD: Record<string, string> = {
+  CONDOMINIO_NOME: 'nome do condomínio', CONDOMINIO_CNPJ: 'CNPJ/CPF do condomínio', CONDOMINIO_ENDERECO: 'endereço do condomínio',
+  SINDICO_NOME: 'nome do síndico', SINDICO_CPF: 'CPF do síndico', SINDICO_EMAIL: 'e-mail do síndico', SINDICO_TELEFONE: 'WhatsApp do síndico',
+  PLANO_NOME: 'plano escolhido', PLANO_VALOR_MENSAL: 'valor mensal', PLANO_VALOR_EXTENSO: 'valor por extenso', PLANO_LIMITE_DESCRICAO: 'limites do plano',
+  TAXA_IMPLANTACAO_DESCRICAO: 'taxa de implantação', DATA_INICIO_TRIAL: 'início do teste', DATA_FIM_TRIAL: 'fim do teste', DIA_VENCIMENTO: 'dia de vencimento',
+  DATA_EXTENSO_CONTRATO: 'data da contratação', AUTENTIQUE_DOCUMENT_ID: 'ID na Autentique', CONTRACT_SHA256_HASH: 'hash do documento',
+};
+
 /** Inline: **negrito**, `código`, {{CAMPO}} e [PENDENTE…] destacados. Links viram texto (sem href arbitrário). */
 function inline(text: string, key: string): React.ReactNode[] {
   const out: React.ReactNode[] = [];
@@ -37,7 +46,7 @@ function inline(text: string, key: string): React.ReactNode[] {
     const t = m[0]; const k = `${key}-${i++}`;
     if (t.startsWith('**')) out.push(<strong key={k}>{t.slice(2, -2)}</strong>);
     else if (t.startsWith('`')) out.push(<code key={k} className="rounded bg-surface-2 px-1">{t.slice(1, -1)}</code>);
-    else if (t.startsWith('{{')) out.push(<mark key={k} className="rounded bg-warning-bg text-warning px-1">[dado da contratada a definir]</mark>);
+    else if (t.startsWith('{{')) out.push(<mark key={k} className="rounded bg-warning-bg text-warning px-1">{CLIENT_FIELD[t.slice(2, -2)] ? `[${CLIENT_FIELD[t.slice(2, -2)]}]` : '[dado da contratada a definir]'}</mark>);
     else if (/^\[(PENDENTE|A DEFINIR|A VERIFICAR)/.test(t)) out.push(<mark key={k} className="rounded bg-warning-bg text-warning px-1">{t}</mark>);
     else out.push(t.replace(/^\[([^\]]+)\]\(([^)]+)\)$/, '$1 ($2)'));
     last = m.index + t.length;

@@ -32,14 +32,14 @@ async function sha256(text: string) {
 
 /** Contrato com os dados desta contratação no lugar dos campos do contratante (só na tela; o documento base não muda). */
 function fillContract(md: string, f: typeof empty, plan: PlanRow | null, cycle: Cycle, amount: number | null) {
-  const ctr = [f.condoName || '[nome do condomínio]', f.cnpj ? `CNPJ ${f.cnpj}` : null, f.city ? `${f.city}${f.uf ? `/${f.uf}` : ''}` : null].filter(Boolean).join(', ');
-  const rep = `${f.repName || '[nome do representante]'}, ${f.repRole || '[cargo]'}`;
-  const planLine = plan && amount != null
-    ? `**Plano escolhido nesta contratação:** ${plan.name}, ciclo ${CYCLE_LABEL[cycle].toLowerCase()}, ${brl(amount)} por ciclo${plan.ent ? `; até ${plan.ent.max_units} unidades e ${plan.ent.max_concierges} portaria(s)` : ''}.`
-    : '**Plano escolhido nesta contratação:** [escolha o plano na etapa 1].';
-  return md
-    .replace(/(1\.2\. \*\*Contratante:\*\*)[^\n]*/, `$1 ${ctr}, representado por ${rep}.`)
-    .replace(/(## 3\. Plano, limites e valores\n)/, `$1\n${planLine}\n`);
+  const v: Record<string, string> = {
+    CONDOMINIO_NOME: f.condoName, CONDOMINIO_CNPJ: f.cnpj, CONDOMINIO_ENDERECO: f.city ? `${f.city}${f.uf ? `/${f.uf}` : ''}` : '',
+    SINDICO_NOME: f.repName, SINDICO_EMAIL: f.repEmail, SINDICO_TELEFONE: f.repPhone,
+    PLANO_NOME: plan ? `${plan.name} (${CYCLE_LABEL[cycle].toLowerCase()})` : '',
+    PLANO_VALOR_MENSAL: amount != null ? brl(Math.round(amount / CYCLE_MONTHS[cycle])).replace(/^R\$\s?/, '') : '',
+    PLANO_LIMITE_DESCRICAO: plan?.ent ? `até ${plan.ent.max_units} unidades e ${plan.ent.max_concierges} portaria(s)` : '',
+  };
+  return md.replace(/\{\{([A-Z0-9_]+)\}\}/g, (m, k) => (v[k]?.trim() ? `**${v[k].trim()}**` : m));
 }
 
 export default function PlanosPage() {
@@ -167,7 +167,7 @@ export default function PlanosPage() {
 
           <Step n={3} title="Contrato com os seus dados">
             {!legal ? <Spinner /> : !legal.doc ? <Alert tone="warning">Contrato indisponível no momento.</Alert> : <>
-              {!legal.published && <Alert tone="warning"><strong>Minuta em revisão — não vigente.</strong> O texto ainda passa por revisão jurídica; campos da contratada aparecem como "a definir". O contrato válido é o aceito no sistema, na versão publicada.</Alert>}
+              <Alert>Contrato oficial versão {legal.doc.version}. Os campos destacados são preenchidos com os seus dados; os que faltarem (CPF do síndico, endereço completo, datas) entram automaticamente na contratação, e o contrato é assinado pelas duas partes na Autentique.</Alert>
               <div className="flex flex-wrap gap-2 print:hidden">
                 {toc.slice(0, 8).map((h) => <a key={h.id} href={`#${h.id}`} className="text-xs rounded-full bg-surface-2 px-3 py-1 hover:underline">{h.text}</a>)}
               </div>
@@ -182,7 +182,7 @@ export default function PlanosPage() {
             {done ? (
               <div className="space-y-4">
                 <Alert tone="success">Pedido <strong>{done.protocol}</strong> recebido: {done.plan}, {CYCLE_LABEL[done.cycle].toLowerCase()}, {brl(done.amount_cents)} por ciclo. Entraremos em contato pelo e-mail informado.</Alert>
-                <p className="text-sm">Próximo passo: crie a conta do condomínio e ative o mês grátis. O contrato é aceito formalmente dentro do sistema, com confirmação do e-mail do representante e cópia em PDF.{!legal?.published && <> <strong>O aceite ainda não foi feito:</strong> a contratação eletrônica só fica disponível depois que a Portaria Prime publicar a versão vigente do contrato.</>}</p>
+                <p className="text-sm">Próximo passo: crie a conta do condomínio e ative o mês grátis. Dentro do sistema, o contrato é preenchido com os dados do condomínio e assinado eletronicamente pelas duas partes na Autentique; o PDF assinado fica disponível no painel.</p>
                 <div className="flex flex-wrap gap-2 print:hidden">
                   <Button onClick={startTrial}>Ativar o mês grátis com este plano</Button>
                   {SALES_WHATSAPP && <a href={`https://wa.me/${SALES_WHATSAPP}?text=${encodeURIComponent(summary())}`} target="_blank" rel="noopener" className="inline-flex items-center gap-2 rounded-xl px-4 min-h-11 border border-line font-semibold"><MessageCircle className="w-4 h-4" aria-hidden />Enviar resumo pelo WhatsApp</a>}
@@ -195,7 +195,7 @@ export default function PlanosPage() {
                 <span className="text-sm">Li o contrato acima e concordo com os termos para seguir com a contratação do plano {plan?.name || ''} ({CYCLE_LABEL[cycle].toLowerCase()}).</span>
               </label>
               <Alert><strong>{KIOSK.name} (acesso piloto):</strong> {KIOSK.included} {KIOSK.requirement} {KIOSK.pilot} <a href={KIOSK.href} onClick={onLink} className="underline">{KIOSK.cta}</a>.</Alert>
-              <p className="text-xs text-muted">Este envio é um <strong>pedido de contratação</strong>, não substitui o aceite formal feito dentro do sistema (com versão registrada, confirmação do e-mail e PDF). Nenhuma cobrança é feita agora; o mês grátis vem primeiro.{legal && !legal.published && ' Enquanto o contrato estiver em minuta, a contratação eletrônica não está disponível e nenhum aceite é registrado.'}</p>
+              <p className="text-xs text-muted">Este envio é um <strong>pedido de contratação</strong>, não substitui o contrato assinado dentro do sistema (preenchido com os dados do condomínio e assinado pelas duas partes na Autentique). Nenhuma cobrança é feita agora; o mês grátis vem primeiro.</p>
               {error && <Alert tone="danger">{error}</Alert>}
               <div className="flex flex-wrap gap-2 print:hidden">
                 <Button type="submit" loading={busy} disabled={!ready}><FileText className="w-4 h-4" aria-hidden />Enviar pedido de contratação</Button>

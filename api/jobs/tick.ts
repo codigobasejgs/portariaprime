@@ -140,14 +140,15 @@ async function run(request: Request) {
         if (!pdf) throw new Error('Comprovante PDF indisponível');
       }
       // Cópia do contrato: sempre o MESMO PDF gravado no aceite (bucket privado).
-      if (job.event === 'contract_copy') {
-        const content = await download(svc, 'tenant-contracts', ctx.contract?.pdf_path);
+      if (job.event === 'contract_copy' || job.event === 'contract_signed') {
+        const signed = job.event === 'contract_signed';
+        const content = await download(svc, 'tenant-contracts', signed ? ctx.contract?.signed_pdf_path : ctx.contract?.pdf_path);
         if (!content) throw new Error('PDF do contrato indisponível');
-        pdf = { filename: `contrato-portaria-prime-${String(ctx.contract?.document_version || '').replace(/[^A-Za-z0-9.-]/g, '')}.pdf`, content };
+        pdf = { filename: `contrato-portaria-prime-${signed ? 'assinado-' : ''}${String(ctx.contract?.document_version || '').replace(/[^A-Za-z0-9.-]/g, '')}.pdf`, content };
       }
       if (job.channel === 'email') {
         // Avisos do condomínio saem com o nome dele; cobrança, suporte e contrato são da Portaria Prime.
-        const own = !/^(trial_reminder|billing_order|billing_paid|support_reply|quote_sent|contract_copy)$/.test(job.event);
+        const own = !/^(trial_reminder|billing_order|billing_paid|support_reply|quote_sent|contract_copy|contract_signed)$/.test(job.event);
         res = await sendEmail(job.recipient, m.subject, emailHtml(ctx, m), pdf || undefined, own ? ctx?.tenant_name : null,
           { text: emailText(ctx, m), idempotencyKey: `job-${job.id}` });
       } else if (job.channel === 'whatsapp' && (job.event === 'portal_welcome'

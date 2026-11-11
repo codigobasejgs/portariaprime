@@ -26,6 +26,7 @@ export interface MessageCtx {
   contract?: {
     id?: string; document_version?: string; document_sha256?: string; accepted_at?: string; plan_name?: string; cycle?: string;
     amount_cents?: number; representative_name?: string; pdf_path?: string | null; pdf_sha256?: string | null;
+    autentique_document_id?: string | null; signed_pdf_path?: string | null; signed_pdf_sha256?: string | null;
   } | null;
 }
 
@@ -215,6 +216,17 @@ Equipe Portaria Prime`,
         lines: [['Versão do contrato', c.document_version], ['Aceito em', when],
           ['Plano', c.plan_name ? `${c.plan_name} · ${CYCLE[c.cycle || ''] || c.cycle || ''}` : null],
           ['Valor por ciclo', c.amount_cents ? brl(c.amount_cents) : null], ['SHA-256 do documento', c.document_sha256]],
+        cta: ['Ver plano e assinatura', billingLink],
+      };
+    }
+    case 'contract_signed': {
+      const c = ctx.contract || {};
+      return {
+        subject: `Contrato assinado pelas duas partes — Portaria Prime — ${ctx.tenant_name}`,
+        whatsapp: `*Portaria Prime*\nContrato de ${wa(ctx.tenant_name)} assinado pelas duas partes na Autentique. O PDF está em Configurações › Plano e assinatura: ${billingLink}`,
+        intro: `O contrato da Portaria Prime com ${ctx.tenant_name} foi assinado eletronicamente pelas duas partes na Autentique. Segue em anexo o PDF assinado, com o manifesto de assinaturas.`,
+        lines: [['Versão do contrato', c.document_version], ['Plano', c.plan_name ? `${c.plan_name} · ${CYCLE[c.cycle || ''] || c.cycle || ''}` : null],
+          ['Documento na Autentique', c.autentique_document_id], ['SHA-256 do PDF assinado', c.signed_pdf_sha256]],
         cta: ['Ver plano e assinatura', billingLink],
       };
     }
