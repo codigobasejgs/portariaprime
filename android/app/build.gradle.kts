@@ -22,8 +22,8 @@ android {
         applicationId = "br.com.portariaprime.kiosk"
         minSdk = 26          // Android 8.0: Keystore EC, setLockTaskFeatures só no 28+ (degrada com aviso)
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.0.2"
+        versionCode = 4
+        versionName = "1.0.3"
         // Origem do sistema web e do backend. HTTPS obrigatório; sem override em release.
         buildConfigField("String", "APP_ORIGIN", "\"${project.findProperty("ppAppOrigin") ?: "https://portariaprime.com.br"}\"")
         // Domínio anterior (portariaprime.vercel.app) continua aceito pela WebView durante a transição: link antigo

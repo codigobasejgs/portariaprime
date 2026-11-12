@@ -119,7 +119,7 @@ export function Modal({ title, onClose, children, wide }: { title: string; onClo
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div ref={ref} role="dialog" aria-modal="true" aria-label={title}
-        className={`w-full ${wide ? 'sm:max-w-3xl' : 'sm:max-w-lg'} max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-surface border border-line`}>
+        className={`w-full ${wide ? 'sm:max-w-3xl' : 'sm:max-w-lg'} max-h-[92dvh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-surface border border-line`}>
         <div className="sticky top-0 bg-surface flex items-center justify-between gap-2 border-b border-line px-4 py-3">
           <h2 className="font-semibold text-text">{title}</h2>
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-surface-2" aria-label="Fechar"><X className="w-5 h-5" /></button>
@@ -150,7 +150,7 @@ export function Toaster() {
     };
   }, []);
   return (
-    <div aria-live="polite" className="fixed bottom-4 inset-x-4 sm:left-auto sm:right-4 sm:w-96 z-[60] space-y-2 pointer-events-none">
+    <div aria-live="polite" className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] inset-x-4 sm:left-auto sm:right-4 sm:w-96 z-[60] space-y-2 pointer-events-none">
       {items.map((t) => (
         <div key={t.id} className="pointer-events-auto shadow-lg"><Alert tone={t.tone}>{t.text}</Alert></div>
       ))}

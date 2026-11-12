@@ -11,6 +11,7 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -21,6 +22,8 @@ import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowInsets
+import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.webkit.*
 import android.widget.*
@@ -61,6 +64,17 @@ class KioskActivity : Activity() {
                 gravity = Gravity.CENTER; setPadding(8, 6, 8, 6); setBackgroundColor(Color.parseColor("#B91C1C")) })
             addView(root, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         }) else setContentView(root)
+        // Android 15+ (targetSdk 35) desenha por baixo das barras e ignora adjustResize: recua o conteúdo pela barra de
+        // navegação, status, recorte da câmera e teclado de cada aparelho. Abaixo do 15 o sistema já faz isso sozinho.
+        // Fundo escuro atrás das barras: ícones claros (voltar, relógio) para continuarem visíveis.
+        if (Build.VERSION.SDK_INT >= 35) window.insetsController?.setSystemBarsAppearance(0,
+            WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS)
+        if (Build.VERSION.SDK_INT >= 35) findViewById<View>(android.R.id.content).apply { setBackgroundColor(Color.parseColor("#101F30")) }
+            .setOnApplyWindowInsetsListener { v, insets ->
+                val i = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout() or WindowInsets.Type.ime())
+                v.setPadding(i.left, i.top, i.right, i.bottom)
+                insets
+            }
         // Token do QR (provisionamento) é consumido aqui se ainda não inscrito.
         getSharedPreferences("kiosk", MODE_PRIVATE).getString("pending_token", null)?.let { t -> if (agent.store.deviceId == null) enroll(t) }
         agent.listener = { ui.post { render() } }
