@@ -52,8 +52,8 @@ export const TOURS: Tour[] = [
     goal: 'Registrar a chegada de uma encomenda com segurança.',
     steps: [
       { area: 'portaria', target: 'portaria-abas', title: 'Receber encomenda', body: 'Toque em “Receber encomenda”. Abre um passo a passo: cada etapa numa tela, com os botões sempre embaixo.' },
-      { area: 'portaria', target: 'portaria-abas', title: '1. Entregador', body: 'Nome do entregador e transportadora. Quem já veio antes aparece ao digitar. Toque em Avançar.' },
-      { area: 'portaria', target: 'portaria-abas', title: '2. Encomenda', body: 'Foto da etiqueta (opcional), unidade, destinatário e rastreio. Guarde no local sugerido, marque “Guardei fisicamente” e toque em “Salvar e avançar”.' },
+      { area: 'portaria', target: 'portaria-abas', title: '1. Entregador', body: 'Toque num entregador recente ou digite o nome; as transportadoras mais usadas aparecem para tocar. Toque em Avançar.' },
+      { area: 'portaria', target: 'portaria-abas', title: '2. Encomenda', body: 'Foto da etiqueta (opcional), unidade (toque no morador para preencher o destinatário), rastreio e tipo de volume. Guarde no local sugerido, marque “Guardei fisicamente” e toque em “Salvar e avançar”.' },
       { area: 'portaria', target: 'portaria-abas', title: '3. Próxima ou encerrar', body: 'Tem mais do mesmo entregador? “Cadastrar próxima encomenda”. Senão, “Encerrar recebimento” mostra o resumo e você finaliza.' },
     ],
   },

@@ -149,6 +149,20 @@ export function Modal({ title, step, onClose, children, wide, footer }: {
   );
 }
 
+/** Opções prontas para tocar embaixo de um campo. `selected` destaca as já escolhidas. */
+export function Chips({ label, options, onPick, selected = [] }: { label: string; options: string[]; onPick: (v: string) => void; selected?: string[] }) {
+  if (!options.length) return null;
+  return (
+    <div className="flex flex-wrap gap-2" role="group" aria-label={label}>
+      {options.map((o) => {
+        const on = selected.includes(o);
+        return <button type="button" key={o} aria-pressed={on} onClick={() => onPick(o)}
+          className={`min-h-10 px-3 rounded-full border text-sm ${on ? 'border-primary bg-primary text-primary-fg' : 'border-line bg-surface hover:bg-surface-2'}`}>{o}</button>;
+      })}
+    </div>
+  );
+}
+
 /* Toasts --------------------------------------------------------------------- */
 type Toast = { id: number; text: string; tone: 'success' | 'warning' | 'danger' | 'info' };
 let pushToast: (t: Omit<Toast, 'id'>) => void = () => {};

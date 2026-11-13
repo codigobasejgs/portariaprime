@@ -8,8 +8,9 @@ import { api, rpc, newKey } from '../../../lib/api';
 import { blobToDataUrl } from '../../../lib/files';
 import { setCaptureBusy } from '../../../lib/capture';
 import { CARRIERS, unitName } from '../../../lib/format';
-import { loadAvailability, locationName, matchUnits, StorageLoc, UnitRow } from '../../../lib/packages';
-import { Alert, Badge, Button, Field, Input, Modal, Select, toast } from '../../../components/ui';
+import { listPackages, loadAvailability, locationName, matchUnits, type PackageRow, StorageLoc, UnitRow } from '../../../lib/packages';
+import { canonical, recall, remember, suggestions } from '../../../lib/recent';
+import { Alert, Badge, Button, Chips, Field, Input, Modal, Select, toast } from '../../../components/ui';
 import { GalleryPhoto, PhotoGallery, preparePhoto, uploadGallery } from '../../../components/PhotoGallery';
 import { DemoLabelSample } from '../../../demo/samples';
 import { CourierPicker } from './CourierPicker';
@@ -80,6 +81,19 @@ export function ReceiveForm({ units, storage, onDone, onClose, preregistered }: 
   const [carrier, setCarrier] = useState(preregistered?.carrier || 'Correios');
   const [recipient, setRecipient] = useState('');
   const [notes, setNotes] = useState('');
+  const [volume, setVolume] = useState('');
+  const [customCarrier, setCustomCarrier] = useState(false);
+  const [recent, setRecent] = useState<PackageRow[]>([]);
+  useEffect(() => {
+    let live = true;
+    listPackages(t.tenant.id, { limit: 100 }).then((rows) => { if (live) setRecent(rows); }).catch(() => {});
+    return () => { live = false; };
+  }, [t.tenant.id]);
+  const carrierOptions = suggestions(recall(t.tenant.id, 'carrier'), recent.map((p) => p.carrier), CARRIERS, 30);
+  const courierOptions = suggestions([], recent.map((p) => p.courier_name));
+  // Porteiros que receberam encomendas recentemente (o porteiro não lê a lista da equipe; o histórico já traz os nomes).
+  const receiverOptions = suggestions([], recent.map((p) => p.received_by_name), [], 6);
+  const volumeOptions = suggestions(recall(t.tenant.id, 'volume'), [], ['Caixa', 'Envelope', 'Pacote', 'Sacola', 'Volume grande']);
   const [loc, setLoc] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -165,11 +179,16 @@ export function ReceiveForm({ units, storage, onDone, onClose, preregistered }: 
   const next = () => {
     if (courier.trim().length < 2) return setError('Informe o nome do entregador.');
     if (receiver.trim().length < 2) return setError('Informe o nome do porteiro que está recebendo.');
+    if (!carrier.trim() || carrier.trim().length > 40) return setError('Informe a transportadora (até 40 caracteres).');
+    setCarrier(canonical(carrier, carrierOptions));
     setError(null); setStep(2);
   };
 
   const save = async () => {
-    if (submitting.current) return;
+    if (submitting.current || ocrBusy) return;
+    // ponytail: tipo de volume fica nas observações; coluna própria só quando houver filtro/relatório por tipo.
+    const itemNotes = [volume.trim() ? `Volume: ${volume.trim()}` : '', notes.trim()].filter(Boolean).join('\n');
+    if (itemNotes.length > 500) return setError('Tipo de volume e observações devem somar até 500 caracteres.');
     if (!unitId) return setError('Selecione a unidade de destino.');
     if (!preregistered && locs.length > 0 && (!loc || !stored)) return setError('Escolha o local e confirme que a encomenda foi guardada nele.');
     submitting.current = true;
@@ -181,7 +200,7 @@ export function ReceiveForm({ units, storage, onDone, onClose, preregistered }: 
         ? await rpc('confirm_preregistered', { p_tenant: t.tenant.id, p_package: preregistered.id, p_unit: unitId, p_tracking: tracking || null, p_carrier: carrier, p_storage_location: loc || null, p_courier: courier.trim(), p_received_by_name: receiver.trim() })
         : await rpc('receive_and_store', {
           p_tenant: t.tenant.id, p_idempotency_key: key.current, p_unit: unitId, p_tracking: tracking || null, p_carrier: carrier,
-          p_recipient: recipient || null, p_notes: notes || null, p_storage_location: loc || null, p_label_sha256: photoSha,
+          p_recipient: recipient || null, p_notes: itemNotes || null, p_storage_location: loc || null, p_label_sha256: photoSha,
           p_courier: courier.trim(), p_received_by_name: receiver.trim(),
         }));
       savedPackage.current = pkg;
@@ -195,13 +214,15 @@ export function ReceiveForm({ units, storage, onDone, onClose, preregistered }: 
         setError('Encomenda já registrada; alguma foto não foi enviada. Toque em “Reenviar fotos” para reenviar só as fotos, sem duplicar a encomenda.');
         return;
       }
-      setDone((d) => [...d, `${where}${recipient.trim() ? ` · ${recipient.trim()}` : ''}${tracking ? ` · ${tracking}` : ''}${chosen ? ` · ${locationName(chosen)}` : pkg.storage_code ? ` · ${pkg.storage_code}` : ''}`]);
+      setDone((d) => [...d, `${where}${recipient.trim() ? ` · ${recipient.trim()}` : ''}${volume.trim() ? ` · ${volume.trim()}` : ''}${tracking ? ` · ${tracking}` : ''}${chosen ? ` · ${locationName(chosen)}` : pkg.storage_code ? ` · ${pkg.storage_code}` : ''}`]);
+      remember(t.tenant.id, 'carrier', carrier);
+      remember(t.tenant.id, 'volume', volume);
       key.current = newKey();
       savedPackage.current = null;
       photos.forEach((p) => URL.revokeObjectURL(p.url));
       // Entregador, transportadora e porteiro ficam para a próxima encomenda da mesma entrega.
       setPhotos([]); setSaved(false); setOcr(null); setOcrMsg(null); setStored(false);
-      setTracking(''); setRecipient(''); setNotes(''); setUnidentified(''); setUnitId(null); setUnitQuery('');
+      setTracking(''); setRecipient(''); setNotes(''); setVolume(''); setUnidentified(''); setUnitId(null); setUnitQuery('');
       if (!preregistered) { setLoc(''); refreshAvail(); }
       onDone();
       if (preregistered) { toast.success(`Recebimento confirmado para ${where}. Moradores da unidade avisados.`); onClose(); } else setStep(3);
@@ -231,11 +252,19 @@ export function ReceiveForm({ units, storage, onDone, onClose, preregistered }: 
     <Modal title={preregistered ? 'Conferir pré-registro' : 'Receber encomenda'} step={stepText} onClose={onClose} footer={footer}>
       {step === 1 && (
         <div className="space-y-4">
-          <CourierPicker value={courier} onChange={setCourier} courierId={courierId} onSelect={setCourierId} carrier={carrier} onCarrier={setCarrier} ocrEnabled={ocrEnabled} />
-          <Field label="Transportadora"><Select value={carrier} onChange={(e) => setCarrier(e.target.value)}>{CARRIERS.map((c) => <option key={c}>{c}</option>)}</Select></Field>
+          <CourierPicker value={courier} onChange={setCourier} courierId={courierId} onSelect={setCourierId} carrier={carrier} onCarrier={setCarrier} ocrEnabled={ocrEnabled}
+            recent={courierOptions} onRecent={(name) => { const previous = recent.find((p) => p.courier_name === name); if (previous) setCarrier(previous.carrier); }} />
+          <Field label="Transportadora">{customCarrier
+            ? <Input value={carrier} onChange={(e) => setCarrier(e.target.value)} list="carriers-recentes" maxLength={40} autoComplete="off" />
+            : <Select value={carrier} onChange={(e) => setCarrier(e.target.value)}>{suggestions([carrier], [], carrierOptions, 40).map((c) => <option key={c}>{c}</option>)}</Select>}
+          </Field>
+          <datalist id="carriers-recentes">{carrierOptions.map((c) => <option key={c} value={c} />)}</datalist>
+          <Chips label="Transportadoras frequentes" options={carrierOptions.slice(0, 5)} selected={[carrier]} onPick={setCarrier} />
+          <Button type="button" variant="ghost" onClick={() => setCustomCarrier((v) => !v)}>{customCarrier ? 'Escolher da lista' : 'Digitar outra transportadora'}</Button>
           <Field label="Recebido por (porteiro, obrigatório)" hint="Preenchido com quem está logado. Altere se o terminal for compartilhado.">
             <Input value={receiver} onChange={(e) => { receiverEdited.current = true; setReceiver(e.target.value); }} required minLength={2} maxLength={120} autoComplete="name" />
           </Field>
+          <Chips label="Porteiros recentes" options={receiverOptions} selected={[receiver]} onPick={(name) => { receiverEdited.current = true; setReceiver(name); }} />
         </div>
       )}
 
@@ -295,7 +324,10 @@ export function ReceiveForm({ units, storage, onDone, onClose, preregistered }: 
               <p className="text-muted text-xs mb-1">Moradores desta unidade:</p>
               {residents.length === 0 ? <p className="text-warning">Nenhum morador cadastrado nesta unidade.</p> : (
                 <ul className="flex flex-wrap gap-2">{residents.map((r, i) => (
-                  <li key={i} className="rounded-lg border border-line px-2 py-1">{r.name} <Badge tone={r.status === 'active' ? 'success' : r.status === 'pending' ? 'warning' : 'neutral'}>{PERSON_STATUS[r.status] || r.status}</Badge></li>
+                  <li key={i}><button type="button" disabled={r.status !== 'active' || saved || !!preregistered} onClick={() => { setRecipient(r.name); setUnidentified(''); }}
+                    className="min-h-11 rounded-lg border border-line px-3 py-1 disabled:opacity-60" aria-pressed={recipient === r.name}>
+                    {r.name} <Badge tone={r.status === 'active' ? 'success' : r.status === 'pending' ? 'warning' : 'neutral'}>{PERSON_STATUS[r.status] || r.status}</Badge>
+                  </button></li>
                 ))}</ul>
               )}
             </div>
@@ -304,6 +336,15 @@ export function ReceiveForm({ units, storage, onDone, onClose, preregistered }: 
           <Field label="Rastreio" hint="Leitor USB funciona aqui (digita e dá Enter).">
             <Input ref={trackingRef} value={tracking} onChange={(e) => setTracking(e.target.value)} maxLength={80} autoComplete="off" />
           </Field>
+          {!preregistered && (
+            <div className="space-y-2">
+              <Field label="Tipo de volume (opcional)" hint="Toque numa opção ou digite um tipo novo; ele aparece nas próximas vezes.">
+                <Input value={volume} onChange={(e) => setVolume(e.target.value)} list="volumes-recentes" maxLength={60} autoComplete="off" />
+              </Field>
+              <datalist id="volumes-recentes">{volumeOptions.map((v) => <option key={v} value={v} />)}</datalist>
+              <Chips label="Tipos de volume" options={volumeOptions} selected={[volume]} onPick={(v) => setVolume(volume === v ? '' : v)} />
+            </div>
+          )}
           {locs.length > 0 && (
             <div className="space-y-2">
               <Field label="Local de guarda" hint={preregistered ? 'Vazio = automático (local com mais espaço).' : 'Sugerido: local com mais espaço livre. Contingência só quando os demais lotarem.'}>

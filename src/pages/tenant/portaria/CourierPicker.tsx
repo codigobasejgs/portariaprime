@@ -3,7 +3,7 @@ import { useTenant } from '../../../lib/tenant';
 import { api, rpc } from '../../../lib/api';
 import { blobToDataUrl, reencode } from '../../../lib/files';
 import { CARRIERS } from '../../../lib/format';
-import { Alert, Badge, Button, Card, Field, Input, Select } from '../../../components/ui';
+import { Alert, Badge, Button, Card, Chips, Field, Input, Select } from '../../../components/ui';
 import { CameraCapture } from '../../../components/CameraCapture';
 import { DemoCnhSample } from '../../../demo/samples';
 
@@ -18,9 +18,11 @@ const display = (h: { full_name: string; carrier_default: string | null }) => (h
  * autocomplete de entregadores já cadastrados e leitura da CNH (OCR → revisão humana → cadastro).
  * O nome continua indo em courier_name; o vínculo (courierId) é gravado à parte pela tela.
  */
-export function CourierPicker({ value, onChange, courierId, onSelect, carrier, onCarrier, ocrEnabled }: {
+export function CourierPicker({ value, onChange, courierId, onSelect, carrier, onCarrier, ocrEnabled, recent = [], onRecent }: {
   value: string; onChange: (name: string) => void; courierId: string | null; onSelect: (id: string | null) => void;
   carrier: string; onCarrier?: (carrier: string) => void; ocrEnabled: boolean;
+  /** Nomes usados nas encomendas recentes deste condomínio: um toque preenche. */
+  recent?: string[]; onRecent?: (name: string) => void;
 }) {
   const t = useTenant();
   const [hits, setHits] = useState<Hit[]>([]);
@@ -87,6 +89,8 @@ export function CourierPicker({ value, onChange, courierId, onSelect, carrier, o
       <Field label="Nome do entregador (obrigatório)" hint="Ex.: João - Mercado Livre. Digite o nome ou os 3 primeiros dígitos do CPF para buscar.">
         <Input value={value} onChange={(e) => { onChange(e.target.value); onSelect(null); setTyped(true); }} required minLength={2} maxLength={80} autoComplete="off" />
       </Field>
+      {!courierId && !value.trim() && <Chips label="Entregadores recentes" options={recent.slice(0, 6)}
+        onPick={(name) => { onChange(name); onSelect(null); setTyped(false); onRecent?.(name); }} />}
       {hits.length > 0 && (
         <div className="flex flex-wrap gap-2" role="listbox" aria-label="Entregadores cadastrados">
           {hits.map((h) => (
