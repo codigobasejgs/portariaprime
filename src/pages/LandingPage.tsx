@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Bell, Check, ClipboardCheck, FileCheck2, FileSignature, FileSpreadsheet, Fingerprint, History, IdCard, KeyRound, LayoutDashboard, Layers, ListChecks, MailCheck, MapPin, Menu, PackageSearch, PackageX, ScanFace, ScanLine, ShieldCheck, Smartphone, Target, Timer, UserSearch, Warehouse, X } from 'lucide-react';
+import { BarChart3, Bell, Bot, Camera, Check, ClipboardCheck, MessagesSquare, FileCheck2, FileSignature, FileSpreadsheet, Fingerprint, History, IdCard, KeyRound, LayoutDashboard, Layers, ListChecks, MailCheck, MapPin, Menu, PackageSearch, PackageX, ScanFace, ScanLine, ShieldCheck, Smartphone, Target, Timer, UserSearch, Warehouse, X } from 'lucide-react';
 import { PortariaPrimeLogo } from '../components/Brand';
 import { ContactForm } from '../components/ContactForm';
 import { KioskPilotForm, KioskPlanNote } from '../components/KioskPilotForm';
@@ -49,6 +49,15 @@ const MANAGEMENT: [React.ElementType, string, string][] = [
   [MailCheck, 'Histórico de mensagens enviadas', 'Para cada aviso de WhatsApp e e-mail: data, destino e situação. Quando um morador disser que não recebeu, você confere o envio por unidade ou morador e exporta em PDF.'],
   [Layers, 'Endereçamento vertical ou horizontal', 'Bloco e apartamento, torre e unidade ou quadra e lote: os nomes seguem o seu condomínio em todas as telas e avisos.'],
   [ShieldCheck, 'Auditoria da portaria', 'Tentativas de acesso, turnos, fotos de verificação e ações sensíveis ficam registradas para consulta do síndico.'],
+];
+
+/** Portaria Prime IA no WhatsApp: os 5 passos (api/_lib/assistant*.ts). Toda alteração passa por resumo + ✅ Confirmar. */
+const ASSISTANT: [React.ElementType, string, string][] = [
+  [MessagesSquare, 'Fale por texto ou áudio', 'Escreva ou mande um áudio como falaria com alguém da portaria. A IA entende o pedido e escolhe a consulta ou a ação certa.'],
+  [ListChecks, 'Pendências na hora', 'Aguardando retirada, atrasadas há mais de 7 dias, recusadas, sem identificação, cadastros para aprovar e palavras-chave do dia.'],
+  [Camera, 'Foto da etiqueta ou da CNH', 'Fotografe a etiqueta e o assistente lê unidade, destinatário, transportadora e rastreio, confere com os moradores e prepara o registro.'],
+  [BarChart3, 'Relatórios por período', 'Hoje, último mês, 3 meses, 6 meses ou ano: recebidas, entregues, tempo médio de retirada, ocupação, transportadoras e porteiros.'],
+  [ShieldCheck, '3 níveis, sempre com sua confirmação', 'Básico só consulta. Intermediário faz ações. Avançado também lê áudio e foto. Nada é alterado sem você tocar em ✅ Confirmar.'],
 ];
 
 /** Comportamento real do app Android gerenciado (docs/KIOSK_ANDROID.md e KIOSK_QA.md). */
@@ -126,7 +135,7 @@ export default function LandingPage() {
   };
   const selectable = (plans || []).filter((p) => p.published && !p.is_custom && p.prices.length);
   const custom = (plans || []).find((p) => p.is_custom);
-  const nav: [string, string][] = [['#como-funciona', 'Como funciona'], ['#seguranca', 'Segurança'], ['/demonstracao', 'Ver demonstração'], ['#portaria-exclusiva', 'Portaria Exclusiva'], ['/tutoriais', 'Tutoriais'], ['/planos', 'Planos e contrato']];
+  const nav: [string, string][] = [['#como-funciona', 'Como funciona'], ['#seguranca', 'Segurança'], ['#assistente', 'IA no WhatsApp'], ['/demonstracao', 'Ver demonstração'], ['#portaria-exclusiva', 'Portaria Exclusiva'], ['/tutoriais', 'Tutoriais'], ['/planos', 'Planos e contrato']];
   // /demonstracao precisa de carga completa da página (o modo demonstração é decidido antes do cliente existir).
   const navLink = ([h, l]: [string, string], extra = '') => h.startsWith('/') && h !== '/demonstracao'
     ? <a key={h} href={h} onClick={(e) => { onLink(e); setMenu(false); }} className={extra}>{l}</a>
@@ -267,6 +276,28 @@ export default function LandingPage() {
               <Shot s={SCREENS.envios} onZoom={setZoom} sizes="(min-width: 1024px) 640px, 100vw" />
               <figcaption className="mt-2 text-sm"><strong>{SCREENS.envios.title}.</strong> <span className="text-muted">{SCREENS.envios.caption} Tela real com dados de demonstração.</span></figcaption>
             </figure>
+          </div>
+        </section>
+
+        {/* Portaria Prime IA no WhatsApp */}
+        <section id="assistente" className="bg-midnight text-porcelain scroll-mt-16" aria-labelledby="ia-h">
+          <div className="max-w-6xl mx-auto px-4 py-16">
+            <p className="inline-flex items-center gap-2 rounded-full border border-champagne/50 px-3 py-1 text-xs font-semibold text-champagne"><Bot className="w-4 h-4" aria-hidden />Novidade · Portaria Prime IA</p>
+            <h2 id="ia-h" className="mt-4 text-3xl sm:text-4xl font-semibold leading-tight max-w-3xl">Seu assistente direto no WhatsApp.</h2>
+            <p className="mt-3 text-lg text-porcelain/80 max-w-3xl">Síndico, zelador e porteiro consultam e operam o condomínio pelo próprio WhatsApp, com botões, texto, áudio e foto. Sem abrir o sistema, e sempre com a sua confirmação antes de qualquer alteração.</p>
+            <ol className="mt-10 grid sm:grid-cols-2 lg:grid-cols-5 gap-4">
+              {ASSISTANT.map(([I, t, x], i) => (
+                <li key={t} className="rounded-2xl border border-porcelain/15 bg-white/[0.04] p-5">
+                  <span className="flex items-center gap-2"><span className="h-8 w-8 rounded-full bg-champagne text-midnight grid place-items-center text-sm font-semibold">{i + 1}</span><I className="w-5 h-5 text-champagne" aria-hidden /></span>
+                  <h3 className="mt-4 font-semibold">{t}</h3>
+                  <p className="mt-1 text-sm text-porcelain/75 leading-relaxed">{x}</p>
+                </li>
+              ))}
+            </ol>
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <a href="/c/demonstracao/configuracoes?perfil=admin&m=assistente" className="min-h-12 px-6 rounded-xl bg-champagne text-midnight font-semibold inline-flex items-center hover:opacity-90">Testar o assistente na demonstração</a>
+              <p className="text-xs text-porcelain/60 max-w-xl">Disponível nos planos com WhatsApp. Responde só aos números autorizados pelo síndico, com as permissões de cada pessoa. A leitura de foto e áudio sugere os dados para você conferir.</p>
+            </div>
           </div>
         </section>
 

@@ -93,6 +93,10 @@ async function run(request: Request) {
   const { data: reminders, error: re } = await svc.rpc('enqueue_package_reminders', { p_limit: 200 });
   report.reminders = re ? { error: re.message } : reminders;
 
+  // Assistente no WhatsApp: confirmações vencidas e ids de mensagem antigos.
+  const { data: assistant, error: ae } = await svc.rpc('assistant_housekeeping');
+  report.assistant = ae ? { error: ae.message } : assistant;
+
   // Dispositivos gerenciados: retenção (eventos 180 dias, tokens vencidos, senhas Wi-Fi não entregues).
   const { data: mdm, error: me } = await svc.rpc('mdm_retention');
   report.mdm_retention = me ? { error: me.message } : mdm;

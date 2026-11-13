@@ -33,6 +33,7 @@ export function DemoBar() {
           </select>
         </label>
         <div className="flex min-w-0 flex-wrap items-center gap-2 sm:ml-auto">
+          <a href="/c/demonstracao/configuracoes?perfil=admin&m=assistente" className="min-h-9 inline-flex items-center rounded-lg border border-champagne/50 px-3 hover:bg-white/10">Testar IA no WhatsApp</a>
           <button type="button" onClick={() => confirm('Restaurar os dados de exemplo? As alterações desta demonstração serão perdidas.') && store.reset()}
             className="min-h-9 rounded-lg border border-champagne/50 px-3 hover:bg-white/10">Restaurar</button>
           <a href="/planos" className="min-h-9 inline-flex items-center rounded-lg bg-champagne px-3 font-semibold text-midnight hover:opacity-90">Contratar</a>

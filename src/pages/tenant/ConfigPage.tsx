@@ -17,6 +17,7 @@ import { AddressingCard } from './config/AddressingCard';
 import { DevicesCard } from './config/DevicesCard';
 import { PrivacyTermCard } from './config/PrivacyTermCard';
 import { DivulgacaoCard } from './config/DivulgacaoCard';
+import { AssistantCard } from './config/AssistantCard';
 
 type T = ReturnType<typeof useTenant>;
 interface Mod { id: string; title: string; desc: string; keys: string; allowed: (t: T) => boolean; render: (t: T) => React.ReactNode }
@@ -38,6 +39,9 @@ export const MODULES: Mod[] = [
     allowed: settings, render: () => <StorageCard /> },
   { id: 'equipe', title: 'Equipe e permissões', desc: 'Porteiros, administradores, convites e revogações.', keys: 'equipe porteiro administrador sindico convite permissao revogar acesso',
     allowed: (t) => t.can('team') || settings(t), render: (t) => <>{t.can('team') && <TeamCard />}<OrgLinkCard /></> },
+  { id: 'assistente', title: 'Assistente no WhatsApp', desc: 'Portaria Prime IA: números autorizados e nível de acesso (básico, intermediário, avançado).',
+    keys: 'assistente ia inteligencia artificial whatsapp bot robo numero autorizado zelador nivel consulta relatorio audio foto',
+    allowed: (t) => t.can('team'), render: () => <AssistantCard /> },
   { id: 'comunicacoes', title: 'Comunicações', desc: 'Canais de aviso, validade do QR e limite por unidade.', keys: 'notificacao aviso email whatsapp push canal qr validade moradores',
     allowed: settings, render: () => <><ChannelsCard /><RemindersCard /></> },
   { id: 'integracoes', title: 'Integrações e diagnóstico', desc: 'WhatsApp do condomínio, teste de envio, falhas e reenvio.', keys: 'whatsapp evolution conectar teste diagnostico falha reenviar fila',

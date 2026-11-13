@@ -9,6 +9,7 @@
     { "source": "/api/team/resident-reset", "destination": "/api/invitations/team-resident-reset?a=team-resident-reset" },
     { "source": "/api/team/porter-:op(preview|signup|login|photo)", "destination": "/api/invitations/team-porter-:op?a=team-porter-:op" },
     { "source": "/api/webhooks/autentique", "destination": "/api/webhooks/infinitepay?a=autentique" },
+    { "source": "/api/webhooks/whaileys", "destination": "/api/webhooks/infinitepay?a=whaileys" },
     { "source": "/api/contact", "destination": "/api/public/contact?a=contact" },
     { "source": "/api/funnel", "destination": "/api/public/funnel?a=funnel" },
     { "source": "/api/quote", "destination": "/api/public/quote?a=quote" },
