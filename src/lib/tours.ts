@@ -18,7 +18,7 @@ export const TOURS: Tour[] = [
       { area: 'configuracoes', target: 'config-locais', title: 'Locais de guarda', body: 'Cadastre prateleiras ou salas com a capacidade de cada uma. O sistema sugere o local com mais espaço.' },
       { area: 'pessoas', target: 'unidades-form', title: 'Unidades', body: 'Cadastre bloco e unidade um a um, ou importe uma planilha CSV.' },
       { area: 'configuracoes', target: 'config-equipe', title: 'Equipe', body: 'Em Configurações › Equipe, convide porteiros pelo e-mail. Cada pessoa só recebe o acesso que você conceder.' },
-      { area: 'portaria', target: 'portaria-abas', title: 'Teste na portaria', body: 'Registre uma encomenda de teste em Receber e entregue em Entregar.' },
+      { area: 'portaria', target: 'portaria-abas', title: 'Teste na portaria', body: 'Registre uma encomenda de teste em “Receber encomenda” e entregue em “Entregar ao morador”.' },
     ],
   },
   {
@@ -51,28 +51,27 @@ export const TOURS: Tour[] = [
     id: 'receber', title: 'Receber uma encomenda', roles: ['admin', 'porteiro'], article: 'receber-encomenda',
     goal: 'Registrar a chegada de uma encomenda com segurança.',
     steps: [
-      { area: 'portaria', target: 'portaria-abas', title: 'Receber', body: 'Toque em Receber. Entregar e Buscar ficam ao lado.' },
-      { area: 'portaria', target: 'receber-foto', title: 'Foto da etiqueta', body: 'Opcional. Se o plano tiver leitura automática, o sistema sugere os dados, e você confere.' },
-      { area: 'portaria', target: 'receber-unidade', title: 'Unidade', body: 'Digite bloco e número, por exemplo “A 101”, e escolha na lista.' },
-      { area: 'portaria', target: 'receber-local', title: 'Local de guarda', body: 'O sistema sugere a estante com mais espaço. Guarde a encomenda e marque “Guardei fisicamente”. Lotado = aviso, nunca local inventado.' },
-      { area: 'portaria', target: 'receber-salvar', title: 'Salvar', body: 'Só considere registrado depois da mensagem de confirmação. O morador é avisado em seguida.' },
+      { area: 'portaria', target: 'portaria-abas', title: 'Receber encomenda', body: 'Toque em “Receber encomenda”. Abre um passo a passo: cada etapa numa tela, com os botões sempre embaixo.' },
+      { area: 'portaria', target: 'portaria-abas', title: '1. Entregador', body: 'Nome do entregador e transportadora. Quem já veio antes aparece ao digitar. Toque em Avançar.' },
+      { area: 'portaria', target: 'portaria-abas', title: '2. Encomenda', body: 'Foto da etiqueta (opcional), unidade, destinatário e rastreio. Guarde no local sugerido, marque “Guardei fisicamente” e toque em “Salvar e avançar”.' },
+      { area: 'portaria', target: 'portaria-abas', title: '3. Próxima ou encerrar', body: 'Tem mais do mesmo entregador? “Cadastrar próxima encomenda”. Senão, “Encerrar recebimento” mostra o resumo e você finaliza.' },
     ],
   },
   {
     id: 'entregar', title: 'Entregar com QR, assinatura e comprovante', roles: ['admin', 'porteiro'], article: 'entregar-encomenda',
     goal: 'Entregar ao morador e guardar a prova da retirada.',
     steps: [
-      { area: 'portaria', target: 'portaria-abas', title: 'Entregar', body: 'Toque em Entregar e leia o QR do morador com a câmera.' },
-      { area: 'portaria', target: 'entregar-qr', title: 'Leitura do QR', body: 'Ler o QR só consulta e mostra onde está a encomenda. Ao confirmar, colete assinatura e foto do item; o QR é usado nessa hora.' },
-      { area: 'portaria', target: 'aguardando-lista', title: 'Sem QR', body: 'Ache a encomenda na lista e use “Entregar sem QR”. Exige justificativa, que fica no histórico.' },
+      { area: 'portaria', target: 'portaria-abas', title: 'Entregar ao morador', body: 'Toque em “Entregar ao morador” e leia o QR do morador, ou escolha a unidade. Ler o QR só consulta; ele é usado ao confirmar.' },
+      { area: 'portaria', target: 'portaria-abas', title: 'Passo a passo', body: 'Informe quem retira, marque as encomendas e confirme cada uma com foto do item e assinatura. No fim, o resumo traz os comprovantes.' },
+      { area: 'portaria', target: 'aguardando-lista', title: 'Sem QR', body: 'Também dá para tocar em “Entregar” direto na encomenda da lista. Sem QR, a justificativa é obrigatória e fica no histórico.' },
     ],
   },
   {
     id: 'excecoes', title: 'Mover, devolver e exceções', roles: ['admin', 'porteiro'], article: 'excecoes',
     goal: 'Registrar o que aconteceu fora do fluxo normal.',
     steps: [
-      { area: 'portaria', target: 'aguardando-lista', title: 'Ações da encomenda', body: 'Mover troca o local de guarda. Exceção registra devolução, extravio ou cancelamento, sempre com motivo.' },
-      { area: 'portaria', target: 'historico-busca', title: 'Histórico', body: 'Busque qualquer encomenda antiga e abra o comprovante das retiradas.' },
+      { area: 'portaria', target: 'aguardando-lista', title: 'Ações da encomenda', body: 'No menu (⋮) da encomenda: mover troca o local de guarda; exceção registra devolução, extravio ou cancelamento, sempre com motivo.' },
+      { area: 'portaria', target: 'historico-busca', title: 'Histórico', body: 'Na aba Histórico, busque qualquer encomenda antiga e abra o comprovante das retiradas.' },
     ],
   },
   {

@@ -112,8 +112,8 @@ try {
   step('cadastra unidade e convida porteiro e morador');
   await s.goto(`${APP}/c/${slug}/pessoas?aba=unidades`);
   await s.getByRole('button', { name: 'Nova unidade' }).click();
-  await s.getByLabel('Bloco/Torre (opcional)').fill('A');
-  await s.getByLabel('Unidade', { exact: true }).fill('101');
+  await s.getByLabel('Bloco (opcional)').fill('A');
+  await s.getByLabel('Apartamento', { exact: true }).fill('101');
   await s.getByRole('button', { name: 'Adicionar unidade' }).click();
   await s.getByText('Unidade cadastrada.').waitFor();
 
@@ -129,7 +129,7 @@ try {
     return link;
   };
   await s.goto(`${APP}/c/${slug}/configuracoes?m=equipe`);
-  const porteiroLink = await invite(() => s.getByRole('button', { name: 'Convidar equipe' }).first().click(), porteiro.email);
+  const porteiroLink = await invite(() => s.getByRole('button', { name: 'Convidar por e-mail' }).first().click(), porteiro.email);
   await s.goto(`${APP}/c/${slug}/pessoas?aba=unidades`);
   const moradorLink = await invite(async () => {
     await s.getByRole('button', { name: /Ações de Bloco A · 101/ }).click();
@@ -145,16 +145,23 @@ try {
 
   step('porteiro registra a encomenda (digitação manual)');
   await p.goto(`${APP}/c/${slug}/portaria`);
+  await p.getByRole('button', { name: 'Receber encomenda' }).click();
+  await p.getByLabel('Nome do entregador (obrigatório)').fill('Entregador E2E - Correios');
+  await p.getByRole('button', { name: 'Avançar', exact: true }).click();
   await p.getByLabel(/Unidade de destino/).fill('A 101');
   await p.getByRole('option', { name: /101/ }).click();
   await p.getByLabel(/Rastreio/).fill(`${run}BR`);
   await p.getByLabel(/Destinatário/).fill('Pessoa morador');
-  await p.getByRole('button', { name: 'Registrar encomenda' }).click();
+  await p.getByRole('button', { name: 'Salvar e avançar' }).click();
   // Com local de guarda cadastrado, a portaria confirma a guarda física antes de registrar.
+  await p.getByText('Escolha o local e confirme').waitFor();
   await p.getByText(/Guardei fisicamente em/).click();
-  await p.getByRole('button', { name: 'Registrar encomenda' }).click();
+  await p.getByRole('button', { name: 'Salvar e avançar' }).click();
   await p.getByText(/Moradores da unidade avisados/).waitFor();
   await shot(p, 'recebimento');
+  await p.getByRole('button', { name: 'Encerrar recebimento' }).click();
+  await p.getByRole('list', { name: 'Encomendas recebidas' }).getByText(/101/).waitFor();
+  await p.getByRole('button', { name: 'Finalizar' }).click();
 
   step('morador vê a encomenda e gera o QR');
   await m.goto(`${APP}/c/${slug}/inicio`);
@@ -165,10 +172,12 @@ try {
   await m.getByText('Uso único').waitFor();
 
   step('porteiro entrega com assinatura (sem QR: justificativa auditada)');
-  await p.getByRole('tab', { name: 'Buscar' }).click();
-  await p.getByRole('button', { name: 'Entregar sem QR' }).click();
+  await p.getByRole('button', { name: 'Entregar', exact: true }).click();
   await p.getByLabel('Quem está retirando').fill('Pessoa morador');
+  await p.getByRole('button', { name: 'Avançar', exact: true }).click();
   await p.getByLabel('Justificativa').fill('Teste automatizado: QR exibido em outro aparelho');
+  await p.getByRole('button', { name: 'Avançar', exact: true }).click();
+  await p.locator('canvas').scrollIntoViewIfNeeded();
   const box = await p.locator('canvas').boundingBox();
   await p.mouse.move(box.x + 30, box.y + 40);
   await p.mouse.down();
@@ -180,6 +189,8 @@ try {
   await p.getByRole('dialog').locator('input[type=file]').setInputFiles({ name: 'item.png', mimeType: 'image/png', buffer: png });
   await p.getByAltText('Foto do item entregue').waitFor();
   await p.getByRole('button', { name: 'Confirmar entrega' }).click();
+  await p.getByText(/Protocolo PP-/).first().waitFor();
+  await p.getByRole('button', { name: 'Ver comprovante' }).click();
   await p.getByRole('dialog', { name: 'Comprovante de retirada' }).waitFor();
   await p.getByText('Retirada por').waitFor();
   await shot(p, 'comprovante');
@@ -189,7 +200,7 @@ try {
 
   step('persistência após recarregar e relatório do síndico');
   await p.reload();
-  await p.getByRole('tab', { name: 'Buscar' }).waitFor();
+  await p.getByRole('tab', { name: 'Histórico' }).waitFor();
   await s.goto(`${APP}/c/${slug}/painel`);
   await s.getByText('Aguardando retirada agora').waitFor();
   await s.goto(`${APP}/c/${slug}/relatorios`);

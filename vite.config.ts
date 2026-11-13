@@ -33,7 +33,8 @@ export default defineConfig({
   build: { target: ['chrome64', 'safari12', 'firefox60', 'edge79'], cssTarget: ['chrome64', 'safari12'], sourcemap: false, rollupOptions: { output: { manualChunks: { supabase: ['@supabase/supabase-js'], react: ['react', 'react-dom'] } } } },
   server: {
     // Somente desenvolvimento: iniciar scripts/dev-api.mjs separadamente.
-    proxy: { '/api': { target: 'http://127.0.0.1:3019' } },
+    // /api/_lib/* é código-fonte importado pelo front (demonstração): quem serve é o Vite, não a API.
+    proxy: { '/api': { target: 'http://127.0.0.1:3019', bypass: (req) => (req.url?.startsWith('/api/_lib/') ? req.url : undefined) } },
     hmr: process.env.DISABLE_HMR !== 'true',
     watch: process.env.DISABLE_HMR === 'true' ? null : {},
   },

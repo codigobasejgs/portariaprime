@@ -37,6 +37,12 @@ try {
   assert.equal(await page.getByLabel('Unidade', { exact: true }).inputValue(), 'u1');
   assert.equal(calls, 1);
   assert.match(page.url(), /\/totem$/);
+  await page.getByLabel('Nome do entregador (obrigatório)').fill('João - Correios');
+  // Celular pequeno: o botão de registrar fica visível sem rolar até o fim do formulário.
+  await page.setViewportSize({ width: 360, height: 640 });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  const box = await page.getByRole('button', { name: 'Registrar encomenda e avisar moradores' }).boundingBox();
+  assert.ok(box.y >= 0 && box.y + box.height <= 640, `botão fora da tela: ${JSON.stringify(box)}`);
   await page.getByRole('button', { name: 'Registrar encomenda e avisar moradores' }).click();
   await page.getByText('Encomenda registrada e disponível para os moradores da unidade. Avisos colocados na fila de envio.').waitFor();
   await page.getByText(/Deposite a encomenda em: Principal · Estante A/).waitFor();

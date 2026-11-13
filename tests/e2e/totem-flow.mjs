@@ -94,24 +94,29 @@ try {
   await page.getByRole('heading', { name: 'Totem da portaria' }).waitFor();
 
   step('Registrar encomenda: foto, unidade, local sugerido e guarda confirmada');
-  await page.getByRole('tab', { name: 'Registrar encomenda' }).click();
+  await page.getByRole('button', { name: 'Receber encomenda' }).click();
+  await page.getByLabel('Nome do entregador (obrigatório)').fill('Entregador E2E - Correios');
+  await page.getByRole('button', { name: 'Avançar', exact: true }).click();
   await page.locator('input[type=file]').first().setInputFiles({ name: 'etiqueta.png', mimeType: 'image/png', buffer: png });
   await page.getByAltText('Foto da etiqueta').waitFor();
   // OCR roda sozinho após a foto; servidor confirma morador ativo e pré-seleciona a unidade.
   await page.getByText('Destinatário confere com um morador ativo da unidade.').waitFor();
-  await page.getByText(/LSP-105/).waitFor();
+  await page.getByText(/LSP-105/).first().waitFor();
+  await page.getByRole('dialog', { name: 'Confira a leitura da etiqueta' }).getByRole('button', { name: /Confirmar/ }).click();
   assert.match(await page.getByText(/Selecionada:/).innerText(), /12B/);
-  assert.equal(await page.getByLabel('Rastreio').inputValue(), `${run}BR1`.toUpperCase());
+  assert.equal(await page.getByLabel('Rastreio', { exact: true }).inputValue(), `${run}BR1`.toUpperCase());
   // Galeria: segunda foto (volume) depois da etiqueta; a etiqueta continua sendo a primeira.
   await page.locator('input[type=file]').first().setInputFiles({ name: 'volume.png', mimeType: 'image/png', buffer: png });
   await page.getByAltText('Foto 2 do volume').waitFor();
   const sel = page.getByLabel('Local de guarda');
   await assert.doesNotReject(async () => assert.match(await sel.locator('option:checked').innerText(), /Estante A › Prateleira 2/));
-  await page.getByRole('button', { name: 'Registrar encomenda' }).click();
+  await page.getByRole('button', { name: 'Salvar e avançar' }).click();
   await page.getByText('Escolha o local e confirme').waitFor();
   await page.getByText(/Guardei fisicamente em/).click();
-  await page.getByRole('button', { name: 'Registrar encomenda' }).click();
+  await page.getByRole('button', { name: 'Salvar e avançar' }).click();
   await page.getByText(/Moradores da unidade avisados/).waitFor();
+  await page.getByRole('button', { name: 'Encerrar recebimento' }).click();
+  await page.getByRole('button', { name: 'Finalizar' }).click();
   await page.screenshot({ path: `${evidence}/totem-registrar.png`, fullPage: true });
 
   const { data: [pkg] } = await svc.from('packages').select('id, storage_confirmed_at, label_sha256').eq('tenant_id', T);
@@ -128,7 +133,6 @@ try {
 
   step('Morador 2 gera QR; porteiro consulta (sem consumir) e entrega com assinatura + foto do item');
   const { token } = await call(m[1], 'issue_pickup_token', { p_tenant: T, p_package: pkg.id });
-  await page.getByRole('tab', { name: 'Entregar ao morador' }).click();
   // Leitura de câmera substituída pela mesma RPC de consulta que o leitor chama.
   const seen = await page.evaluate(async ([tk, tenant]) => {
     const { supabase } = await import('/src/lib/supabase.ts');
@@ -138,15 +142,18 @@ try {
   }, [token, T]);
   assert.deepEqual(seen, [undefined, undefined, 'Prateleira 2'], 'consulta repetida não consome o QR');
   // Abre a entrega pela lista (mesmo modal); QR é validado na confirmação.
-  await page.getByRole('button', { name: 'Entregar sem QR' }).first().click();
-  const modal = page.getByRole('dialog');
-  await modal.getByText(/Buscar em: .*Estante A › Prateleira 2/).waitFor();
+  await page.getByRole('button', { name: 'Entregar', exact: true }).first().click();
+  const modal = page.getByRole('dialog', { name: 'Entregar encomenda' });
   await modal.getByLabel('Quem está retirando').fill('Maria Souza Santos');
+  await modal.getByRole('button', { name: 'Avançar', exact: true }).click();
   await modal.getByLabel('Justificativa').fill('Teste E2E: QR conferido por consulta na tela');
+  await modal.getByRole('button', { name: 'Avançar', exact: true }).click();
+  await modal.getByText(/Buscar em: .*Estante A › Prateleira 2/).waitFor();
   await assert.ok(await modal.getByRole('button', { name: 'Confirmar entrega' }).isDisabled(), 'sem assinatura/foto não confirma');
   const canvas = modal.locator('canvas');
   // Sob carga o modal ainda está assentando: assinar só com o canvas parado (2 leituras iguais).
   const sign = async () => {
+    await canvas.scrollIntoViewIfNeeded();
     let box = await canvas.boundingBox();
     for (let i = 0; i < 20; i++) { await page.waitForTimeout(100); const b = await canvas.boundingBox(); if (b && box && b.x === box.x && b.y === box.y && b.width === box.width) break; box = b; }
     await page.mouse.move(box.x + 20, box.y + 30); await page.mouse.down();
@@ -161,6 +168,8 @@ try {
   if (!(await confirmBtn.isEnabled())) { console.log('  (assinatura não registrou; assinando de novo)'); await sign(); }
   assert.ok(await confirmBtn.isEnabled(), 'com assinatura e foto, a entrega pode ser confirmada');
   await modal.getByRole('button', { name: 'Confirmar entrega' }).click();
+  await modal.getByText(/Protocolo PP-/).first().waitFor();
+  await modal.getByRole('button', { name: 'Ver comprovante' }).click();
   await page.getByText('Comprovante de retirada').first().waitFor();
   await page.screenshot({ path: `${evidence}/totem-comprovante.png`, fullPage: true });
 

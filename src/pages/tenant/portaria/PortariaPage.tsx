@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ArrowRightLeft, FileText, PackageCheck, PackagePlus, Search, Tablet } from 'lucide-react';
+import { ArrowRightLeft, FileText, MoreVertical, PackageCheck, PackagePlus, Tablet, Undo2 } from 'lucide-react';
 import { navigate, query } from '../../../lib/router';
 import { useRealtime, useTenant } from '../../../lib/tenant';
 import { rpc } from '../../../lib/api';
@@ -7,22 +7,26 @@ import { dateTime, STATUS_LABEL, unitName } from '../../../lib/format';
 import { listPackages, loadStorage, loadUnits, PackageRow, StorageLoc, UnitRow } from '../../../lib/packages';
 import { Alert, Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, toast } from '../../../components/ui';
 import { ReceiveForm } from './ReceiveForm';
-import { PickupModal, PickupPackage, ScanToPickup } from './PickupFlow';
+import { PickupModal, type PickupStart } from './PickupFlow';
 import { ReceiptModal } from '../Receipt';
 
-type Tab = 'receber' | 'entregar' | 'buscar';
-
-/** Portaria completa; `totem` = balcão da equipe logada, só Registrar/Entregar, botões grandes. */
+/**
+ * Tela inicial da portaria: duas ações grandes (Receber, Entregar) que abrem o passo a passo em pop-up,
+ * e embaixo só a lista do que aguarda retirada. Histórico fica numa aba à parte.
+ * `totem` = balcão da equipe logada: mesmos fluxos, botões maiores, sem histórico.
+ */
 export function PortariaPage({ totem = false }: { totem?: boolean }) {
   const t = useTenant();
-  const [tab, setTab] = useState<Tab>(() => { const a = query('aba'); return a === 'entregar' || (a === 'buscar' && !totem) ? a : 'receber'; });
+  const [view, setView] = useState<'aguardando' | 'historico'>('aguardando');
   const [units, setUnits] = useState<UnitRow[] | null>(null);
   const [storage, setStorage] = useState<StorageLoc[]>([]);
   const [pending, setPending] = useState<PackageRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pickup, setPickup] = useState<{ pkg: PickupPackage; qr: string | null } | null>(null);
+  const [receive, setReceive] = useState(() => query('aba') === 'receber');
+  const [pickup, setPickup] = useState<PickupStart | null>(() => (query('aba') === 'entregar' ? {} : null));
   const [receipt, setReceipt] = useState<string | null>(null);
   const [confirmPre, setConfirmPre] = useState<PackageRow | null>(null);
+  const [actions, setActions] = useState<PackageRow | null>(null);
   const [move, setMove] = useState<PackageRow | null>(null);
   const [resolve, setResolve] = useState<PackageRow | null>(null);
   const [search, setSearch] = useState('');
@@ -52,26 +56,25 @@ export function PortariaPage({ totem = false }: { totem?: boolean }) {
   // Recusadas pelo morador primeiro (precisam de devolução).
   const filtered = (q ? waiting.filter((p) => `${p.unit_block || ''} ${p.unit_label || ''} ${p.tracking_code || ''} ${p.recipient_name || ''}`.toLowerCase().includes(q)) : waiting)
     .slice().sort((a, b) => Number(!!flags[b.id]?.rejected_at) - Number(!!flags[a.id]?.rejected_at));
-
-  const tabs: [Tab, string, React.ElementType][] = totem
-    ? [['receber', 'Registrar encomenda', PackagePlus], ['entregar', 'Entregar ao morador', PackageCheck]]
-    : [['receber', 'Receber', PackagePlus], ['entregar', 'Entregar', PackageCheck], ['buscar', 'Buscar', Search]];
+  const noUnits = units?.length === 0;
+  const big = `${totem ? 'min-h-24 text-xl' : 'min-h-16 text-base'} rounded-2xl font-semibold flex items-center justify-center gap-2`;
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-semibold">{totem ? 'Totem da portaria' : 'Encomendas'}</h1>
         {totem ? <Button variant="ghost" onClick={() => navigate(`/c/${t.tenant.slug}/portaria`)}>Voltar às encomendas</Button>
-          : <Button variant="secondary" onClick={() => navigate(`/c/${t.tenant.slug}/totem-equipe`)}><Tablet className="w-4 h-4" /> Abrir totem</Button>}
+          : <Button variant="ghost" onClick={() => navigate(`/c/${t.tenant.slug}/totem-equipe`)}><Tablet className="w-4 h-4" /> Abrir totem</Button>}
       </div>
       {error && <Alert tone="danger">{error}</Alert>}
-      <div className={`grid ${totem ? 'grid-cols-2' : 'grid-cols-3'} gap-2`} role="tablist" data-tour="portaria-abas">
-        {tabs.map(([id, label, Icon]) => (
-          <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
-            className={`${totem ? 'min-h-20 text-lg' : 'min-h-14'} rounded-2xl border text-base font-semibold flex items-center justify-center gap-2 ${tab === id ? 'bg-primary text-primary-fg border-transparent' : 'bg-surface border-line'}`}>
-            <Icon className="w-5 h-5" aria-hidden /> {label}
-          </button>
-        ))}
+      {noUnits && <Alert tone="warning">Nenhuma unidade cadastrada ainda. O administrador cadastra em “Unidades e moradores”.</Alert>}
+      <div className="grid grid-cols-2 gap-3" data-tour="portaria-abas">
+        <button type="button" disabled={!units || noUnits} onClick={() => setReceive(true)} className={`${big} bg-primary text-primary-fg disabled:opacity-50`}>
+          <PackagePlus className="w-6 h-6 shrink-0" aria-hidden /> Receber encomenda
+        </button>
+        <button type="button" onClick={() => setPickup({})} className={`${big} bg-surface border border-line`}>
+          <PackageCheck className="w-6 h-6 shrink-0" aria-hidden /> Entregar ao morador
+        </button>
       </div>
 
       {!totem && pre.length > 0 && (
@@ -86,41 +89,33 @@ export function PortariaPage({ totem = false }: { totem?: boolean }) {
         </Card>
       )}
 
-      {tab === 'receber' && (units ? (
-        units.length === 0 ? <Alert tone="warning">Nenhuma unidade cadastrada ainda. O administrador cadastra em “Unidades e moradores”.</Alert>
-          : <ReceiveForm units={units} storage={storage} onDone={refresh} />
-      ) : <Spinner />)}
-
-      {tab === 'entregar' && (
-        <Card className="space-y-4" data-tour="entregar-qr">
-          <ScanToPickup onFound={(pkg, qr) => setPickup({ pkg, qr })} />
-          <p className="text-sm text-muted">Sem QR? Encontre a encomenda em “Buscar” e use “Entregar sem QR”.</p>
-        </Card>
+      {!totem && (
+        <div className="flex gap-1 border-b border-line" role="tablist" aria-label="Listas de encomendas">
+          {([['aguardando', `Aguardando retirada (${waiting.length})`], ['historico', 'Histórico']] as const).map(([id, label]) => (
+            <button key={id} type="button" role="tab" aria-selected={view === id} onClick={() => setView(id)} data-tour={id === 'historico' ? 'historico-busca' : undefined}
+              className={`min-h-11 px-3 text-sm font-semibold border-b-2 -mb-px ${view === id ? 'border-primary text-text' : 'border-transparent text-muted'}`}>{label}</button>
+          ))}
+        </div>
       )}
 
-      {(tab === 'buscar' || tab === 'entregar') && (
+      {view === 'aguardando' && (
         <Card className="space-y-3" data-tour="aguardando-lista">
-          <div className="flex flex-wrap items-end gap-3 justify-between">
-            <p className="font-semibold">Aguardando retirada ({waiting.length})</p>
-            <div className="w-full sm:w-72"><Input aria-label="Buscar por unidade, rastreio ou nome" placeholder="Unidade, rastreio ou nome" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
-          </div>
+          {totem && <p className="font-semibold">Aguardando retirada ({waiting.length})</p>}
+          <Input aria-label="Buscar por unidade, rastreio ou nome" placeholder="Buscar por unidade, rastreio ou nome" value={search} onChange={(e) => setSearch(e.target.value)} />
           {!pending ? <Spinner /> : filtered.length === 0 ? <Empty title="Nada aguardando retirada" /> : (
             <ul className="divide-y divide-line">
               {filtered.map((p) => { const f = flags[p.id]; return (
-                <li key={p.id} className={`py-3 flex flex-wrap items-center justify-between gap-2 ${f?.rejected_at ? 'border-l-4 border-danger bg-danger-bg pl-3 -ml-1 rounded-r-lg' : ''}`}>
+                <li key={p.id} className={`py-3 flex items-center justify-between gap-2 ${f?.rejected_at ? 'border-l-4 border-danger bg-danger-bg pl-3 -ml-1 rounded-r-lg' : ''}`}>
                   <div className="min-w-0">
                     <p className="font-medium">{unitName(p.unit_block, p.unit_label, t.unitLabels)} <span className="text-muted font-normal">· {p.carrier}</span>
                       {f?.unidentified_reason && <> <Badge tone="warning">Morador não identificado</Badge></>}</p>
-                    {f?.rejected_at && <p className="text-sm font-semibold text-danger">🚫 Recusada pelo morador: {REJECTION_TEXT[f.rejection_reason || 'other']}{f.rejection_note ? ` — ${f.rejection_note}` : ''}. Devolva pela “Exceção”.</p>}
-                    <p className="text-xs text-muted">{p.tracking_code || 'sem rastreio'} · {dateTime(p.received_at, t.tenant.timezone)}{p.storage_code ? ` · ${p.storage_code}` : ''}{p.notified_at ? ' · avisado' : ''}</p>
-                    {(p.courier_name || p.received_by_name) && <p className="text-xs text-muted">
-                      {p.received_by_name && <>Recebido por {p.received_by_name}</>}{p.courier_name && <>{p.received_by_name ? ' · ' : ''}Entregador: {p.courier_name}</>}
-                    </p>}
+                    {f?.rejected_at && <p className="text-sm font-semibold text-danger">🚫 Recusada pelo morador: {REJECTION_TEXT[f.rejection_reason || 'other']}{f.rejection_note ? ` — ${f.rejection_note}` : ''}.</p>}
+                    <p className="text-xs text-muted break-words">{[p.recipient_name, p.tracking_code || 'sem rastreio', dateTime(p.received_at, t.tenant.timezone), p.storage_code].filter(Boolean).join(' · ')}</p>
                   </div>
-                  <div className="flex gap-2">
-                    {storage.length > 0 && <Button variant="ghost" onClick={() => setMove(p)} aria-label="Mover"><ArrowRightLeft className="w-4 h-4" /></Button>}
-                    <Button variant={f?.rejected_at ? 'danger' : 'ghost'} onClick={() => setResolve(p)}>{f?.rejected_at ? 'Devolver' : 'Exceção'}</Button>
-                    {!f?.rejected_at && <Button variant="secondary" onClick={() => setPickup({ pkg: p, qr: null })}>Entregar sem QR</Button>}
+                  <div className="flex shrink-0 gap-1">
+                    {f?.rejected_at ? <Button variant="danger" onClick={() => setResolve(p)}><Undo2 className="w-4 h-4" /> Devolver</Button>
+                      : <Button variant="secondary" onClick={() => setPickup({ pkg: p })}>Entregar</Button>}
+                    <Button variant="ghost" className="px-2" aria-label={`Mais ações de ${unitName(p.unit_block, p.unit_label, t.unitLabels)}`} onClick={() => setActions(p)}><MoreVertical className="w-5 h-5" /></Button>
                   </div>
                 </li>
               ); })}
@@ -128,15 +123,22 @@ export function PortariaPage({ totem = false }: { totem?: boolean }) {
           )}
         </Card>
       )}
+      {view === 'aguardando' && <KeywordsCard />}
+      {view === 'historico' && <HistorySearch onReceipt={setReceipt} />}
 
-      {tab !== 'entregar' && <KeywordsCard />}
-      {tab === 'buscar' && <HistorySearch onReceipt={setReceipt} />}
-
-      {pickup && <PickupModal pkg={pickup.pkg} qr={pickup.qr} onClose={() => setPickup(null)} onDone={(_, id) => { setPickup(null); refresh(); setReceipt(id); }} />}
+      {receive && units && !noUnits && <ReceiveForm units={units} storage={storage} onDone={refresh} onClose={() => setReceive(false)} />}
+      {confirmPre && units && <ReceiveForm units={units} storage={storage} preregistered={confirmPre} onDone={refresh} onClose={() => setConfirmPre(null)} />}
+      {pickup && <PickupModal start={pickup} waiting={waiting.filter((p) => !flags[p.id]?.rejected_at)} onClose={() => setPickup(null)} onDone={refresh} onReceipt={setReceipt} />}
       {receipt && <ReceiptModal packageId={receipt} onClose={() => setReceipt(null)} />}
-      {confirmPre && units && (
-        <Modal title="Conferir pré-registro" onClose={() => setConfirmPre(null)} wide>
-          <ReceiveForm units={units} storage={storage} preregistered={confirmPre} onDone={() => { setConfirmPre(null); refresh(); }} />
+      {actions && (
+        <Modal title={`${unitName(actions.unit_block, actions.unit_label, t.unitLabels)} · ${actions.carrier}`} onClose={() => setActions(null)}>
+          <div className="space-y-3">
+            <p className="text-sm text-muted">
+              {actions.received_by_name && <>Recebido por {actions.received_by_name}. </>}{actions.courier_name && <>Entregador: {actions.courier_name}. </>}{actions.notified_at ? 'Moradores avisados.' : 'Aviso ainda não enviado.'}
+            </p>
+            {storage.length > 0 && <Button variant="secondary" className="w-full" onClick={() => { setMove(actions); setActions(null); }}><ArrowRightLeft className="w-4 h-4" /> Mover de local</Button>}
+            <Button variant="secondary" className="w-full" onClick={() => { setResolve(actions); setActions(null); }}>Registrar exceção (devolução, extravio…)</Button>
+          </div>
         </Modal>
       )}
       {move && <MoveModal pkg={move} storage={storage} onClose={() => setMove(null)} onDone={() => { setMove(null); refresh(); }} />}

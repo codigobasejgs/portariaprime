@@ -62,7 +62,7 @@ Nenhum P0/P1 aberto nos fluxos testados.
 Inspeção heurística por tarefa, feita pelo agente sem consultar código durante o roteiro; **não é teste com usuários reais** (nenhum participante foi recrutado).
 
 - Síndico configura: oferta de tutorial na primeira tela; próximos passos listados após criar o condomínio. Risco: muitos campos na tela de Configurações em celular.
-- Porteiro recebe/entrega: três botões grandes no topo; unidade por busca “A 101”. Risco: “Entregar sem QR” fica na aba Buscar (o tour mostra).
+- Porteiro recebe/entrega: dois botões grandes no topo (“Receber encomenda”, “Entregar ao morador”) abrem o passo a passo em pop-up, com os botões de ação fixos embaixo; a lista “Aguardando retirada” tem “Entregar” em cada encomenda.
 - Morador encontra QR: botão primário na lista “Para retirar”.
 - Gestor entende trial e preço: Assinatura mostra início, fim e valor depois do teste.
 

@@ -18,6 +18,8 @@ Testes: `tests/db/device-ocr.test.mjs`, `tests/api/device-ocr.test.mjs` e `tests
 
 ## Registrar encomenda
 
+Passo a passo em pop-up (`ReceiveForm`), uma etapa por tela, botões de ação fixos embaixo: **1** entregador e transportadora → **2** encomenda (itens abaixo) → **3** confirmação, com “Cadastrar próxima encomenda” (volta à etapa 2, mesmo entregador) ou “Encerrar recebimento” → resumo e “Finalizar”.
+
 1. Foto da etiqueta (câmera `getUserMedia` com câmera traseira; alternativa: arquivo). Reencodada no navegador (sem EXIF). SHA-256 da foto original é calculado no cliente.
 2. OCR opcional (`/api/ocr/analyze-label`): extrai campos separados e chama `match_recipient` no servidor com a sessão do operador. Ver `OCR_VALIDACAO.md`.
 3. Unidade: só vem pré-selecionada quando o servidor responde `matched` ou `name_only`. `conflict`, `ambiguous`, `unit_only` e `not_found` exigem escolha manual.
@@ -28,12 +30,14 @@ Testes: `tests/db/device-ocr.test.mjs`, `tests/api/device-ocr.test.mjs` e `tests
 
 ## Entregar ao morador
 
+Passo a passo em pop-up (`PickupModal`): **1** unidade (QR ou busca) e quem retira → **2** encomendas da unidade a entregar → **3** confirmação de cada uma (foto do item por encomenda; assinatura colhida uma vez e gravada em cada encomenda) → resumo com protocolos e “Encerrar entrega”. Cada encomenda é uma chamada própria a `deliver_package`.
+
 1. Morador mostra o QR (`issue_pickup_token`, uso único, hash no banco, renovar revoga o anterior).
 2. Leitura chama `lookup_pickup_token`: **só consulta**, não consome. Mostra foto da etiqueta, unidade e o local **atual** (após `move_package`, aparece o novo).
 3. Operador informa quem retira e a relação (morador / recebedor autorizado), coleta assinatura e **foto do item entregue** (obrigatória).
 4. Uploads (assinatura PNG, foto JPEG) vão ao bucket privado no caminho da encomenda.
 5. `deliver_package` (uma transação): bloqueia a encomenda, exige que assinatura e foto existam, sejam do próprio operador (`storage.objects.owner = auth.uid()`) e não tenham sido usadas; consome o QR; grava comprovante imutável; enfileira avisos. Idempotente por `p_request`: retry após queda devolve o mesmo protocolo.
-6. Comprovante abre na tela; moradores da unidade veem no histórico e recebem link estável.
+6. Comprovante fica no resumo da entrega (“Ver comprovante”); moradores da unidade veem no histórico e recebem link estável.
 
 `confirm_pickup` deixou de ser chamável pelo cliente (`revoke execute ... from authenticated`); só `deliver_package` a usa.
 

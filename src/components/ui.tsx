@@ -97,15 +97,31 @@ export function Empty({ title, children }: { title: string; children?: React.Rea
   );
 }
 
-export function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
+/**
+ * Pop-up. Com `footer` vira passo a passo: no celular ocupa a tela inteira, o conteúdo rola no meio e os
+ * botões de ação ficam fixos embaixo (acima da barra do aparelho). `step` é o texto da etapa atual.
+ */
+export function Modal({ title, step, onClose, children, wide, footer }: {
+  title: string; step?: string; onClose: () => void; children: React.ReactNode; wide?: boolean; footer?: React.ReactNode;
+}) {
   const ref = useRef<HTMLDivElement>(null);
+  const body = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
   close.current = onClose;
+  // Etapa nova começa do topo, com o foco no conteúdo (teclado e leitor de tela não ficam no botão que sumiu).
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) { first.current = false; return; }
+    if (body.current) { body.current.scrollTop = 0; body.current.focus(); }
+  }, [step]);
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
     const selector = 'button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),a[href],[tabindex="0"]';
     ref.current?.querySelector<HTMLElement>(selector)?.focus();
     const onKey = (e: KeyboardEvent) => {
+      // Pop-up aberto sobre outro (conferência da leitura dentro do passo a passo): só o de cima responde.
+      const open = document.querySelectorAll('[role="dialog"]');
+      if (open[open.length - 1] !== ref.current) return;
       if (e.key === 'Escape') { e.preventDefault(); close.current(); }
       if (e.key !== 'Tab') return;
       const items = Array.from(ref.current?.querySelectorAll<HTMLElement>(selector) || []).filter(el => el.getClientRects().length);
@@ -117,14 +133,17 @@ export function Modal({ title, onClose, children, wide }: { title: string; onClo
     return () => { document.removeEventListener('keydown', onKey); prev?.focus(); };
   }, []);
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4"
+      // Passo a passo não fecha com toque fora: evita perder o que já foi preenchido.
+      onMouseDown={(e) => !footer && e.target === e.currentTarget && onClose()}>
       <div ref={ref} role="dialog" aria-modal="true" aria-label={title}
-        className={`w-full ${wide ? 'sm:max-w-3xl' : 'sm:max-w-lg'} max-h-[92dvh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-surface border border-line`}>
-        <div className="sticky top-0 bg-surface flex items-center justify-between gap-2 border-b border-line px-4 py-3">
-          <h2 className="font-semibold text-text">{title}</h2>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-surface-2" aria-label="Fechar"><X className="w-5 h-5" /></button>
+        className={`w-full ${wide ? 'sm:max-w-3xl' : 'sm:max-w-lg'} ${footer ? 'h-full sm:h-auto' : 'max-h-[92dvh] rounded-t-2xl'} sm:max-h-[92dvh] flex flex-col sm:rounded-2xl bg-surface border border-line`}>
+        <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
+          <h2 className="font-semibold text-text">{title}{step && <span className="block text-xs font-normal text-muted" aria-live="polite">{step}</span>}</h2>
+          <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-surface-2" aria-label="Fechar"><X className="w-5 h-5" /></button>
         </div>
-        <div className="p-4">{children}</div>
+        <div ref={body} tabIndex={-1} className="p-4 flex-1 min-h-0 overflow-y-auto outline-none">{children}</div>
+        {footer && <div className="flex flex-wrap gap-2 border-t border-line p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] [&>button]:flex-1">{footer}</div>}
       </div>
     </div>
   );

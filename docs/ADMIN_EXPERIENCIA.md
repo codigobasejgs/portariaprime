@@ -5,7 +5,7 @@
 | Menu | Rota | Quem vê |
 |---|---|---|
 | Visão geral (Operação / Análise) | `/c/{slug}/painel?aba=operacao\|analise` | administrador |
-| Encomendas (Receber, Entregar, Buscar) | `/c/{slug}/portaria?aba=receber\|entregar\|buscar` | equipe |
+| Encomendas (Receber encomenda, Entregar ao morador, lista e Histórico) | `/c/{slug}/portaria` (`?aba=receber|entregar` já abre o passo a passo) | equipe |
 | ↳ Totem da equipe | `/c/{slug}/totem-equipe` (botão "Abrir totem") | equipe |
 | Unidades e moradores | `/c/{slug}/pessoas?aba=unidades\|moradores\|solicitacoes` | administrador |
 | Relatórios | `/c/{slug}/relatorios?status=…&antigas=1` | administrador |

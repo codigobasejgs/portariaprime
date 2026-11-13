@@ -105,7 +105,7 @@ function Operation() {
             <div><p className="text-muted text-xs">Retiradas</p><p className="text-2xl font-semibold tabular-nums">{n(d.picked_today)}</p></div>
           </div>
           <div className="flex flex-wrap gap-2 pt-1">
-            {t.isStaff && <Button variant="secondary" onClick={() => navigate(`${base}/portaria`)}><Package className="w-4 h-4" /> Receber</Button>}
+            {t.isStaff && <Button variant="secondary" onClick={() => navigate(`${base}/portaria?aba=receber`)}><Package className="w-4 h-4" /> Receber</Button>}
             {t.isStaff && <Button variant="secondary" onClick={() => navigate(`${base}/portaria?aba=entregar`)}><PackageCheck className="w-4 h-4" /> Entregar</Button>}
             {t.can('approve') && a.access_requests > 0 && <Button variant="secondary" onClick={() => navigate(`${base}/pessoas?aba=solicitacoes`)}><UserCheck className="w-4 h-4" /> Aprovar cadastros</Button>}
             {t.isStaff && <Button variant="ghost" onClick={() => navigate(`${base}/totem-equipe`)}><Tablet className="w-4 h-4" /> Abrir totem</Button>}

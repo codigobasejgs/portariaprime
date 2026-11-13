@@ -69,10 +69,16 @@ await waitFor(() => ev(`!!document.querySelector('input[type=email]')`), 25000, 
 await setInput('input[type=email]', lab.porteiro.email); await setInput('input[type=password]', lab.porteiro.password);
 await click('button', 'Entrar');
 await waitFor(async () => /\/portaria$/.test(await path()), 25000, 'portaria');
-await waitFor(() => hasText('Registrar encomenda'), 25000, 'tela de recebimento');
+await waitFor(() => hasText('Receber encomenda'), 25000, 'tela de encomendas');
 assert.equal(lock(), 'LOCKED');
 
 step('etiqueta pela câmera da WebView (permissão concedida pelo DPC)');
+// Passo a passo: etapa 1 (entregador) antes da etiqueta.
+assert.ok(await click('button', 'Receber encomenda'), 'abre o recebimento');
+await waitFor(() => hasText('Etapa 1 de 3'), 10000, 'etapa do entregador');
+await setInput('Nome do entregador', 'Entregador Lab - Correios');
+assert.ok(await click('[role=dialog] button', 'Avançar'));
+await waitFor(() => hasText('Etapa 2 de 3'), 10000, 'etapa da encomenda');
 await fakeCamera(svgUrl(['DESTINATÁRIO:', 'MARIA MORADORA LAB', 'BLOCO A APTO 101', 'CORREIOS - SEDEX', `OBJETO: ${run}BR`]));
 assert.ok(await click('button', 'Fotografar etiqueta') || await click('button', 'Escanear etiqueta'), 'botão da câmera');
 await waitFor(() => ev(`(document.querySelector('video')?.videoWidth || 0) > 0`), 15000, 'vídeo da câmera com imagem');
@@ -99,11 +105,14 @@ await waitFor(() => hasText('Selecionada: Bloco A · 101'), 10000, 'unidade conf
 await setInput('Rastreio', `${run}BR`);
 await setInput('Destinatário', 'Maria Moradora Lab');
 await ev(`(() => { const s = document.querySelector('select'); if (s && [...s.options].some(o => o.value)) { s.value = [...s.options].find(o => o.value).value; s.dispatchEvent(new Event('change', { bubbles: true })); } return true; })()`);
-await click('button', 'Registrar encomenda'); await sleep(800);
+await click('button', 'Salvar e avançar'); await sleep(800);
 await ev(`(() => { const c = [...document.querySelectorAll('label')].find((l) => l.textContent.includes('Guardei fisicamente'))?.querySelector('input'); if (c && !c.checked) c.click(); return true; })()`);
-await click('button', 'Registrar encomenda');
+await click('button', 'Salvar e avançar');
 await waitFor(() => hasText('Moradores da unidade avisados'), 30000, 'registro confirmado');
 save('21-registrada');
+assert.ok(await click('button', 'Encerrar recebimento'));
+await waitFor(() => hasText('Resumo do recebimento'), 10000, 'resumo');
+assert.ok(await click('button', 'Finalizar'));
 const { data: pkg } = await svc.from('packages').select('id, status, storage_confirmed_at').eq('tenant_id', lab.tenant).eq('tracking_code', `${run}BR`).single();
 assert.ok(pkg.storage_confirmed_at, 'guarda confirmada');
 const { count: labelPhotos } = await svc.from('package_attachments').select('id', { count: 'exact', head: true }).eq('package_id', pkg.id).eq('kind', 'label_photo');
@@ -117,7 +126,7 @@ if (te) throw te;
 
 step('porteiro lê o QR pela câmera do quiosque');
 await fakeCamera(await QRCode.toDataURL(tok.token, { margin: 4, width: 600 }));
-await click('[role=tab]', 'Entregar');
+await click('button', 'Entregar ao morador');
 await waitFor(() => hasText('Ler QR Code do morador'), 10000, 'aba entregar');
 await click('button', 'Ler QR Code do morador');
 await waitFor(() => hasText('QR Code válido para esta encomenda'), 30000, 'QR lido e validado');
@@ -125,6 +134,10 @@ save('22-qr-lido');
 
 step('quem retira, assinatura no canvas, foto do item e confirmação');
 await setInput('Quem está retirando', 'Maria Moradora Lab');
+assert.ok(await click('[role=dialog] button', 'Avançar'));
+await waitFor(() => hasText('Etapa 2 de 3'), 10000, 'encomendas da unidade');
+assert.ok(await click('[role=dialog] button', 'Avançar'));
+await waitFor(() => hasText('Etapa 3 de 3'), 10000, 'confirmação');
 // Assinatura com eventos de ponteiro reais no canvas do SignaturePad.
 await ev(`document.querySelector('[role=dialog] canvas').scrollIntoView({ block: 'center' }); true`);
 await sleep(500);
@@ -145,6 +158,8 @@ await waitFor(() => ev(`!!document.querySelector('img[alt="Foto do item entregue
 save('23-assinatura-foto');
 await waitFor(() => ev(`[...document.querySelectorAll('[role=dialog] button')].some((b) => b.textContent.includes('Confirmar entrega') && !b.disabled)`), 10000, 'botão habilitado (assinatura + foto)');
 await click('[role=dialog] button', 'Confirmar entrega');
+await waitFor(() => hasText('Protocolo PP-'), 30000, 'resumo da entrega');
+assert.ok(await click('[role=dialog] button', 'Ver comprovante'));
 await waitFor(() => hasText('Retirada por'), 30000, 'comprovante');
 save('24-comprovante');
 const { data: rc } = await svc.from('receipts').select('protocol, snapshot').eq('package_id', pkg.id).single();
@@ -158,8 +173,8 @@ console.log(`   protocolo ${rc.protocol}; avisos ao morador: ${notes}`);
 assert.equal(lock(), 'LOCKED', 'continua no quiosque');
 
 step('histórico: a entrega aparece na busca da portaria');
-await ev(`document.querySelector('[role=dialog] button[aria-label="Fechar"]')?.click(); true`);
-await click('[role=tab]', 'Buscar');
+await ev(`[...document.querySelectorAll('[role=dialog] button[aria-label="Fechar"]')].reverse().forEach((b) => b.click()); true`);
+await click('[role=tab]', 'Histórico');
 await sleep(800);
 await ev(`(() => { const i = [...document.querySelectorAll('input')].find((x) => x.placeholder === 'Rastreio, unidade ou nome'); if (!i) return false;
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(i, '${run}BR'); i.dispatchEvent(new Event('input', { bubbles: true })); i.form?.requestSubmit(); return true; })()`);

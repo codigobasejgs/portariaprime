@@ -55,6 +55,11 @@ const waitingForResident = async () => {
   return m?.[1] ? Number(m[1]) : (await h.innerText()).includes('1 encomenda') ? 1 : 0;
 };
 const toast = (text) => page.getByText(text).first().waitFor({ timeout: 10000 });
+// Passo a passo do recebimento: abre o pop-up, conclui a etapa do entregador e salva o item.
+const COURIER = 'Nome do entregador (obrigatório)';
+const openReceive = async () => { await page.goto(`${C}/portaria?perfil=porteiro`); await page.getByRole('button', { name: 'Receber encomenda' }).click(); };
+const advance = () => page.getByRole('button', { name: 'Avançar', exact: true }).click();
+const saveItem = async () => { await page.getByText('Guardei fisicamente em').click(); await page.getByRole('button', { name: 'Salvar e avançar' }).click(); await toast('Encomenda registrada para'); };
 
 let kpi0 = 0, res0 = 0;
 await step('/demonstracao redireciona para o painel do síndico com a barra', async () => {
@@ -71,16 +76,22 @@ await step('morador vê as encomendas da própria unidade', async () => {
 });
 
 await step('portaria registra encomenda com etiqueta de exemplo (OCR 92)', async () => {
-  await page.goto(`${C}/portaria?perfil=porteiro`);
+  await openReceive();
+  await page.getByLabel(COURIER).fill('Marcos (Correios)');
+  check((await page.getByLabel('Recebido por (porteiro, obrigatório)').inputValue()).length >= 2, 'porteiro não preenchido');
+  await advance();
   await page.getByRole('button', { name: 'Usar etiqueta de exemplo' }).click();
   await page.getByText('Sugestão preenchida').waitFor({ timeout: 15000 });
   await page.getByRole('dialog', { name: 'Confira a leitura da etiqueta' }).getByRole('button', { name: /Confirmar/ }).click();
   check((await page.getByText('Selecionada:').innerText()).includes('101'), 'OCR não selecionou A 101');
-  await page.getByLabel('Nome do entregador (obrigatório)').fill('Marcos (Correios)');
-  check((await page.getByLabel('Recebido por (porteiro, obrigatório)').inputValue()).length >= 2, 'porteiro não preenchido');
-  await page.getByText('Guardei fisicamente em').click();
-  await page.getByRole('button', { name: 'Registrar encomenda' }).click();
-  await toast('Encomenda registrada para');
+  await saveItem();
+  // Mesmo entregador, próxima encomenda: volta à etapa 2 limpa, sem pedir o entregador de novo.
+  await page.getByRole('button', { name: 'Cadastrar próxima encomenda' }).click();
+  await page.getByText('1 já registrada(s)').waitFor();
+  check((await page.getByPlaceholder('Buscar unidade').inputValue()) === '', 'unidade não foi limpa para a próxima');
+  await page.getByRole('button', { name: 'Voltar' }).click();
+  check((await page.getByLabel(COURIER).inputValue()) === 'Marcos (Correios)', 'entregador não foi mantido');
+  await page.getByRole('button', { name: 'Fechar' }).click();
 });
 
 await step('encomenda nova aparece no morador', async () => {
@@ -100,13 +111,19 @@ await step('portaria entrega via QR de exemplo com assinatura e foto', async () 
   const modal = page.getByRole('dialog', { name: 'Entregar encomenda' });
   await modal.waitFor({ timeout: 10000 });
   await modal.getByText('QR Code válido').waitFor();
+  await modal.getByLabel('Quem está retirando').fill('João Silva');
+  await modal.getByRole('button', { name: 'Avançar' }).click();
+  check(await modal.getByRole('checkbox').first().isChecked(), 'encomenda do QR não veio marcada');
+  await modal.getByRole('button', { name: 'Avançar' }).click();
   const box = await modal.locator('canvas').first().boundingBox();
   await page.mouse.move(box.x + 20, box.y + 20); await page.mouse.down();
   await page.mouse.move(box.x + 120, box.y + 60, { steps: 8 }); await page.mouse.move(box.x + 200, box.y + 30, { steps: 8 }); await page.mouse.up();
   await modal.getByRole('button', { name: 'Usar foto de exemplo' }).click();
   await modal.getByAltText('Foto do item entregue').waitFor();
   await modal.getByRole('button', { name: 'Confirmar entrega' }).click();
-  await toast('Entrega registrada. Protocolo DEMO-');
+  await modal.getByText(/Protocolo DEMO-/).first().waitFor({ timeout: 10000 });
+  await modal.getByRole('button', { name: 'Encerrar entrega' }).click();
+  await modal.waitFor({ state: 'detached' });
   await page.goto(`${C}/painel?perfil=admin`);
   const n = await kpi();
   check(n === kpi0, `após entrega esperado ${kpi0}, veio ${n}`);
@@ -165,8 +182,8 @@ await step('síndico exclui morador', async () => {
 });
 
 await step('portaria acha entregador recorrente pelo nome (CPF só com prefixo)', async () => {
-  await page.goto(`${C}/portaria?perfil=porteiro`);
-  await page.getByLabel('Nome do entregador (obrigatório)').fill('marcos per');
+  await openReceive();
+  await page.getByLabel(COURIER).fill('marcos per');
   const opt = page.getByRole('listbox', { name: 'Entregadores cadastrados' }).getByRole('option').first();
   await opt.waitFor({ timeout: 10000 });
   const txt = await opt.innerText();
@@ -177,19 +194,21 @@ await step('portaria acha entregador recorrente pelo nome (CPF só com prefixo)'
 });
 
 await step('portaria lê CNH de exemplo, revisa, confirma e registra a encomenda vinculada', async () => {
-  await page.goto(`${C}/portaria?perfil=porteiro`);
+  await openReceive();
   await page.getByRole('button', { name: 'Simular CNH de exemplo' }).click();
   await page.getByText('Dados da CNH (revise)').waitFor({ timeout: 15000 });
   check((await page.getByLabel('CPF', { exact: true }).inputValue()) === '529.982.247-25', 'CPF da leitura não apareceu para revisão');
   check(!(await page.getByLabel(/Guardar foto do documento/).isChecked()), 'foto do documento marcada por padrão');
   await page.getByRole('button', { name: 'Confirmar entregador' }).click();
   await page.getByText('Entregador cadastrado').waitFor({ timeout: 10000 });
-  check((await page.getByLabel('Nome do entregador (obrigatório)').inputValue()).startsWith('Rodrigo Fictício Santos'), 'nome do entregador não preenchido');
+  check((await page.getByLabel(COURIER).inputValue()).startsWith('Rodrigo Fictício Santos'), 'nome do entregador não preenchido');
+  await advance();
   await page.getByPlaceholder('Buscar unidade').fill('A 102');
   await page.getByRole('listbox', { name: 'Unidades encontradas' }).getByRole('option').first().click();
-  await page.getByText('Guardei fisicamente em').click();
-  await page.getByRole('button', { name: 'Registrar encomenda' }).click();
-  await toast('Encomenda registrada para');
+  await saveItem();
+  await page.getByRole('button', { name: 'Encerrar recebimento' }).click();
+  await page.getByRole('list', { name: 'Encomendas recebidas' }).getByText(/102/).waitFor();
+  await page.getByRole('button', { name: 'Finalizar' }).click();
 });
 
 await step('síndico vê entregador mascarado, revela com motivo e lista as entregas', async () => {
@@ -249,7 +268,9 @@ await step('nenhum service worker nem push registrado', async () => {
 
 // --- Melhorias da portaria (OCR, não identificado, recusa, palavra-chave, busca combinada) ---
 await step('OCR: pop-up de confirmação; “Alterar” leva ao campo da unidade', async () => {
-  await page.goto(`${C}/portaria?perfil=porteiro`);
+  await openReceive();
+  await page.getByLabel(COURIER).fill('Lia - Mercado Livre');
+  await advance();
   await page.getByRole('button', { name: 'Usar etiqueta de exemplo' }).click();
   const dlg = page.getByRole('dialog', { name: 'Confira a leitura da etiqueta' });
   await dlg.waitFor({ timeout: 15000 });
@@ -260,11 +281,9 @@ await step('OCR: pop-up de confirmação; “Alterar” leva ao campo da unidade
 });
 
 await step('portaria marca “Morador não identificado” e síndico destina', async () => {
+  await page.getByText('Mais opções').click();
   await page.getByText('Morador não identificado', { exact: true }).click();
-  await page.getByLabel('Nome do entregador (obrigatório)').fill('Lia - Mercado Livre');
-  await page.getByText('Guardei fisicamente em').click();
-  await page.getByRole('button', { name: 'Registrar encomenda' }).click();
-  await toast('Encomenda registrada para');
+  await saveItem();
   await page.goto(`${C}/pessoas?perfil=admin&aba=nao-identificado`);
   await page.getByRole('tab', { name: /Morador não identificado \(1\)/ }).waitFor({ timeout: 15000 });
   const list = page.getByRole('list', { name: 'Encomendas com morador não identificado' });
@@ -300,10 +319,13 @@ await step('palavra-chave: morador informa, portaria vê no recebimento e marca 
   await modal.getByLabel('Palavra-chave').fill('GIRASSOL 42');
   await modal.getByRole('button', { name: 'Salvar palavra-chave' }).click();
   await page.getByRole('region', { name: 'Palavra-chave de entrega' }).getByText('GIRASSOL 42').waitFor({ timeout: 10000 });
-  await page.goto(`${C}/portaria?perfil=porteiro`);
+  await openReceive();
+  await page.getByLabel(COURIER).fill('Caio - Correios');
+  await advance();
   await page.getByPlaceholder('Buscar unidade').fill('A 101');
   await page.getByRole('option', { name: 'Bloco A · 101' }).click();
   await page.getByRole('status', { name: 'Palavra-chave da unidade' }).getByText('GIRASSOL 42').waitFor({ timeout: 10000 });
+  await page.getByRole('button', { name: 'Fechar' }).click();
   const card = page.getByRole('region', { name: 'Palavras-chave dos moradores' });
   await card.getByText('GIRASSOL 42').waitFor();
   await card.getByRole('button', { name: 'Marcar como utilizada' }).click();

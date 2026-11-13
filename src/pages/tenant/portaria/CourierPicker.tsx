@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useTenant } from '../../../lib/tenant';
 import { api, rpc } from '../../../lib/api';
 import { blobToDataUrl, reencode } from '../../../lib/files';
+import { CARRIERS } from '../../../lib/format';
 import { Alert, Badge, Button, Card, Field, Input, Select } from '../../../components/ui';
 import { CameraCapture } from '../../../components/CameraCapture';
 import { DemoCnhSample } from '../../../demo/samples';
@@ -17,9 +18,9 @@ const display = (h: { full_name: string; carrier_default: string | null }) => (h
  * autocomplete de entregadores já cadastrados e leitura da CNH (OCR → revisão humana → cadastro).
  * O nome continua indo em courier_name; o vínculo (courierId) é gravado à parte pela tela.
  */
-export function CourierPicker({ value, onChange, courierId, onSelect, carrier, ocrEnabled }: {
+export function CourierPicker({ value, onChange, courierId, onSelect, carrier, onCarrier, ocrEnabled }: {
   value: string; onChange: (name: string) => void; courierId: string | null; onSelect: (id: string | null) => void;
-  carrier: string; ocrEnabled: boolean;
+  carrier: string; onCarrier?: (carrier: string) => void; ocrEnabled: boolean;
 }) {
   const t = useTenant();
   const [hits, setHits] = useState<Hit[]>([]);
@@ -45,6 +46,8 @@ export function CourierPicker({ value, onChange, courierId, onSelect, carrier, o
   const pick = (h: Hit) => {
     onChange(display(h)); onSelect(h.id); setLinked(`${h.full_name}${h.document_hint ? ` · CPF ${h.document_hint}` : ''}`);
     setHits([]); setTyped(false);
+    // Entregador conhecido: a transportadora habitual dele já vem escolhida.
+    if (h.carrier_default && CARRIERS.includes(h.carrier_default)) onCarrier?.(h.carrier_default);
   };
 
   const read = async (b: Blob) => {

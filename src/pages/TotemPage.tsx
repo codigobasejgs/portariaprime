@@ -71,7 +71,7 @@ export default function TotemPage({ slug }: { slug: string }) {
       }
     } catch (e: any) { setError(e.message); } finally { submitting.current = false; setBusy(false); }
   }
-  return <main className="min-h-dvh flex items-center justify-center px-4 py-8"><Card className="max-w-xl w-full space-y-5">
+  return <main className="min-h-dvh flex items-center justify-center px-4 py-4 sm:py-8"><Card className="max-w-xl w-full space-y-5">
     <PortariaPrimeLogo /><h1 className="text-2xl font-semibold">Entrega na portaria</h1>
     {done ? <div className="space-y-4">
       <Alert tone="success">Encomenda registrada e disponível para os moradores da unidade. Avisos colocados na fila de envio.</Alert>
@@ -90,7 +90,10 @@ export default function TotemPage({ slug }: { slug: string }) {
         <Field label="Rastreio"><Input value={tracking} maxLength={80} onChange={e => setTracking(e.target.value)} /></Field>
         <Field label="Nome do entregador (obrigatório)" hint="Ex.: João - Mercado Livre"><Input required minLength={2} value={courier} maxLength={80} onChange={e => setCourier(e.target.value)} /></Field>
       </>}
-      {error && <Alert tone="danger">{error}</Alert>}<Button type="submit" className="w-full" loading={busy} disabled={ocrBusy}>{secret ? 'Registrar encomenda e avisar moradores' : 'Parear dispositivo'}</Button>
+      <div className="sticky bottom-0 -mx-4 sm:-mx-5 space-y-2 border-t border-line bg-surface px-4 sm:px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        {error && <Alert tone="danger">{error}</Alert>}
+        <Button type="submit" className="w-full min-h-12 text-base" loading={busy} disabled={ocrBusy}>{secret ? 'Registrar encomenda e avisar moradores' : 'Parear dispositivo'}</Button>
+      </div>
     </form>}
     <p className="text-xs text-muted">Sem acesso a moradores, telefones ou histórico. Operações administrativas exigem autenticação na área do condomínio.</p>
     <p className="text-xs text-muted">O leitor de etiqueta funciona neste dispositivo pareado, sem conta de porteiro ou administrador.</p>

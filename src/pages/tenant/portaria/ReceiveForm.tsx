@@ -9,7 +9,7 @@ import { blobToDataUrl } from '../../../lib/files';
 import { setCaptureBusy } from '../../../lib/capture';
 import { CARRIERS, unitName } from '../../../lib/format';
 import { loadAvailability, locationName, matchUnits, StorageLoc, UnitRow } from '../../../lib/packages';
-import { Alert, Badge, Button, Card, Field, Input, Modal, Select, toast } from '../../../components/ui';
+import { Alert, Badge, Button, Field, Input, Modal, Select, toast } from '../../../components/ui';
 import { GalleryPhoto, PhotoGallery, preparePhoto, uploadGallery } from '../../../components/PhotoGallery';
 import { DemoLabelSample } from '../../../demo/samples';
 import { CourierPicker } from './CourierPicker';
@@ -39,19 +39,15 @@ const MATCH_TEXT: Record<Match['status'], string> = {
   not_found: 'Nenhum morador ativo corresponde à leitura. Escolha a unidade manualmente.',
 };
 
-interface BatchResult { key: string; ok: boolean; text: string }
-
 /**
- * Recebimento: fotos (opcionais, até 8; a 1ª é a etiqueta e alimenta o OCR) →
- * OCR sugere → porteiro confirma unidade, destinatário e rastreio → servidor
- * grava encomenda + histórico + avisos numa transação. Chave de idempotência
- * por item evita duplicar em duplo clique/retry.
- * Registro rápido (lote): mantém unidade/transportadora/local entre itens;
- * destinatário obrigatório e guarda física confirmada em cada item; resultado
- * individual listado. Usa a mesma RPC (receive_and_store).
+ * Recebimento em etapas, cada uma numa tela com os botões fixos embaixo:
+ *   1 entregador → 2 encomenda (foto/OCR, unidade, destinatário, rastreio, guarda) → 3 confirmação
+ *   ("Cadastrar próxima" volta à 2 com o mesmo entregador) → resumo de tudo que o entregador deixou.
+ * O servidor grava encomenda + histórico + avisos numa transação (receive_and_store); a chave de
+ * idempotência por item evita duplicar em duplo toque/retry. Pré-registro do totem: só etapas 1 e 2.
  */
-export function ReceiveForm({ units, storage, onDone, preregistered }: {
-  units: UnitRow[]; storage: StorageLoc[]; onDone: () => void;
+export function ReceiveForm({ units, storage, onDone, onClose, preregistered }: {
+  units: UnitRow[]; storage: StorageLoc[]; onDone: () => void; onClose: () => void;
   preregistered?: { id: string; tracking_code: string | null; carrier: string; unit_id: string | null; courier_name?: string | null } | null;
 }) {
   const t = useTenant();
@@ -70,8 +66,8 @@ export function ReceiveForm({ units, storage, onDone, preregistered }: {
   const [photos, setPhotos] = useState<GalleryPhoto[]>([]);
   const [avail, setAvail] = useState<StorageLoc[] | null>(null);
   const [stored, setStored] = useState(false);
-  const [batch, setBatch] = useState(false);
-  const [results, setResults] = useState<BatchResult[]>([]);
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [done, setDone] = useState<string[]>([]);
   const [saved, setSaved] = useState(false);
   const photo = photos[0]?.blob || null;
   const photoSha = photos[0]?.sha || null;
@@ -92,7 +88,6 @@ export function ReceiveForm({ units, storage, onDone, preregistered }: {
   const submitting = useRef(false);
   const trackingRef = useRef<HTMLInputElement>(null);
   const unitRef = useRef<HTMLInputElement>(null);
-  const formRef = useRef<HTMLFormElement>(null);
   const [ocrConfirm, setOcrConfirm] = useState(false);
   const [unidentified, setUnidentified] = useState<UnidentifiedReason | ''>('');
   const [residents, setResidents] = useState<{ name: string; status: string }[] | null>(null);
@@ -167,18 +162,19 @@ export function ReceiveForm({ units, storage, onDone, preregistered }: {
     }
   };
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (submitting.current) return;
-    if (!unitId) return setError('Selecione a unidade de destino.');
+  const next = () => {
     if (courier.trim().length < 2) return setError('Informe o nome do entregador.');
     if (receiver.trim().length < 2) return setError('Informe o nome do porteiro que está recebendo.');
-    if (batch && !preregistered && recipient.trim().length < 2) return setError('No registro rápido, informe o destinatário de cada encomenda.');
+    setError(null); setStep(2);
+  };
+
+  const save = async () => {
+    if (submitting.current) return;
+    if (!unitId) return setError('Selecione a unidade de destino.');
     if (!preregistered && locs.length > 0 && (!loc || !stored)) return setError('Escolha o local e confirme que a encomenda foi guardada nele.');
     submitting.current = true;
     setBusy(true);
     setError(null);
-    const itemKey = key.current;
     const where = unitName(unit?.block, unit?.label, labels);
     try {
       const pkg = savedPackage.current || (preregistered
@@ -196,174 +192,176 @@ export function ReceiveForm({ units, storage, onDone, preregistered }: {
       if (unidentified) await rpc('package_mark_unidentified', { p_tenant: t.tenant.id, p_package: pkg.id, p_reason: unidentified });
       // Fotos: cada uma falha/repete sozinha; a encomenda nunca é duplicada.
       if (photos.length && !(await uploadGallery(t.tenant.id, pkg.id, photos, updatePhoto))) {
-        setError('Encomenda já registrada; alguma foto não foi enviada. Toque em “Registrar” (ou “Reenviar fotos com falha”) para reenviar só as fotos, sem duplicar a encomenda.');
-        if (batch) setResults((r) => [{ key: itemKey, ok: false, text: `${where}: registrada, foto pendente` }, ...r.filter((x) => x.key !== itemKey)]);
+        setError('Encomenda já registrada; alguma foto não foi enviada. Toque em “Reenviar fotos” para reenviar só as fotos, sem duplicar a encomenda.');
         return;
       }
-      const msg = `Encomenda registrada para ${where}${chosen ? ` em ${locationName(chosen)}` : pkg.storage_code ? ` — guardar em ${pkg.storage_code}` : ''}. Moradores da unidade avisados.`;
-      toast.success(msg);
-      if (batch) setResults((r) => [{ key: itemKey, ok: true, text: `${where} · ${recipient.trim()}${tracking ? ` · ${tracking}` : ''}${chosen ? ` · ${locationName(chosen)}` : ''}` }, ...r.filter((x) => x.key !== itemKey)]);
+      setDone((d) => [...d, `${where}${recipient.trim() ? ` · ${recipient.trim()}` : ''}${tracking ? ` · ${tracking}` : ''}${chosen ? ` · ${locationName(chosen)}` : pkg.storage_code ? ` · ${pkg.storage_code}` : ''}`]);
       key.current = newKey();
       savedPackage.current = null;
       photos.forEach((p) => URL.revokeObjectURL(p.url));
+      // Entregador, transportadora e porteiro ficam para a próxima encomenda da mesma entrega.
       setPhotos([]); setSaved(false); setOcr(null); setOcrMsg(null); setStored(false);
-      setTracking(''); setRecipient(''); setNotes(''); setCourier(''); setUnidentified(''); setCourierId(null);
-      if (!preregistered) refreshAvail();
-      // Registro rápido mantém unidade, transportadora e local; a guarda é confirmada de novo a cada item.
-      if (!batch) {
-        if (!preregistered) setLoc('');
-        setUnitId(null); setUnitQuery('');
-      } else trackingRef.current?.focus();
+      setTracking(''); setRecipient(''); setNotes(''); setUnidentified(''); setUnitId(null); setUnitQuery('');
+      if (!preregistered) { setLoc(''); refreshAvail(); }
       onDone();
+      if (preregistered) { toast.success(`Recebimento confirmado para ${where}. Moradores da unidade avisados.`); onClose(); } else setStep(3);
     } catch (err: any) {
       setError(err.message);
-      if (batch && !savedPackage.current) setResults((r) => [{ key: itemKey, ok: false, text: `${where}: ${err.message}` }, ...r.filter((x) => x.key !== itemKey)]);
     } finally {
       submitting.current = false;
       setBusy(false);
     }
   };
 
+  const total = preregistered ? 2 : 3;
+  const stepText = step === 4 ? 'Resumo do recebimento' : `Etapa ${step} de ${total} · ${['Entregador', 'Encomenda', 'Confirmação'][step - 1]}`;
+  const problem = error && <div className="basis-full"><Alert tone="danger">{error}</Alert></div>;
+  const big = 'min-h-12 text-base';
+  const footer = step === 1 ? <>{problem}<Button key="avancar" type="button" className={big} onClick={next}>Avançar</Button></>
+    : step === 2 ? <>{problem}
+      <Button key="voltar" type="button" variant="secondary" className={big} disabled={busy || saved} onClick={() => { setError(null); setStep(1); }}>Voltar</Button>
+      <Button key="salvar" type="button" className={big} loading={busy} onClick={save}>{saved ? 'Reenviar fotos' : preregistered ? 'Confirmar recebimento' : 'Salvar e avançar'}</Button></>
+    : step === 3 ? <>
+      <Button key="proxima" type="button" variant="secondary" className={big} onClick={() => setStep(2)}>Cadastrar próxima encomenda</Button>
+      <Button key="encerrar" type="button" className={big} onClick={() => setStep(4)}>Encerrar recebimento</Button></>
+    : <Button key="fim" type="button" className={big} onClick={onClose}>Finalizar</Button>;
+
   return (
     <>
-    <form ref={formRef} onSubmit={submit} className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:items-start">
-      <Card className="space-y-3" data-tour="receber-foto">
-        <p className="font-semibold">1. Fotos <span className="text-muted font-normal">(opcional, até 8 — a primeira é a etiqueta)</span></p>
-        <PhotoGallery photos={photos} onChange={setPhotos} locked={saved || busy} label={ocrEnabled ? 'Escanear etiqueta (câmera)' : 'Fotografar etiqueta'}
-          onRetry={savedPackage.current ? () => formRef.current?.requestSubmit() : undefined} />
-        {!saved && !busy && photos.length < 8 && <DemoLabelSample onPick={async (b) => setPhotos([...photos, await preparePhoto(b)])} />}
-        {photo && ocrEnabled && (
-          <Button type="button" variant="secondary" onClick={() => runOcr()} loading={ocrBusy}><ScanText className="w-4 h-4" /> {ocr ? 'Ler etiqueta de novo' : 'Ler etiqueta automaticamente'}</Button>
-        )}
-        {photo && !ocrEnabled && <p className="text-xs text-muted">Leitura automática não incluída no plano. Preencha os dados ao lado.</p>}
-        {ocrMsg && <Alert tone={ocr && ocr.confidence >= 70 ? 'info' : 'warning'}>{ocrMsg}</Alert>}
-        {ocr?.match && <Alert tone={ocr.match.status === 'matched' ? 'success' : 'warning'}>{MATCH_TEXT[ocr.match.status]}</Alert>}
-        {ocr && [...ocr.alerts, ...(ocr.match?.alerts || [])].length > 0 && (
-          <ul className="text-xs list-disc pl-4" aria-label="Alertas da leitura">{[...ocr.alerts, ...(ocr.match?.alerts || [])].map((a, i) => <li key={i}>{a}</li>)}</ul>
-        )}
-        {ocr && (
-          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs" aria-label="Campos lidos">
-            {([['Destinatário', ocr.recipientName], ['Remetente', ocr.senderName], ['Complemento', ocr.complement], ['Rastreio', ocr.trackingCode],
-              ['Pedido', ocr.orderNumber], ['Nota fiscal', ocr.invoiceNumber]] as const).map(([k, v]) => (
-              <React.Fragment key={k}><dt className="text-muted">{k}</dt><dd className="break-all">{v || 'não identificado'}</dd></React.Fragment>
-            ))}
-          </dl>
-        )}
-        {ocr && ocr.evidence.length > 0 && (
-          <details className="text-xs"><summary className="cursor-pointer text-muted">Evidências da leitura</summary>
-            <ul className="mt-1 space-y-0.5">{ocr.evidence.map((e, i) => <li key={i}><span className="text-muted">{e.field}:</span> “{e.text}”</li>)}</ul>
-          </details>
-        )}
-      </Card>
-
-      <Card className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="font-semibold">2. Dados da encomenda</p>
-          {!preregistered && (
-            <label className="flex items-center gap-2 text-sm min-h-11">
-              <input type="checkbox" checked={batch} onChange={(e) => { setBatch(e.target.checked); setResults([]); }} />
-              Registro rápido (várias seguidas)
-            </label>
-          )}
-        </div>
-        {batch && <p className="text-xs text-muted">Unidade, transportadora e local ficam para o próximo item. Destinatário e confirmação da guarda são exigidos em cada encomenda.</p>}
-        <div data-tour="receber-unidade"><Field label="Unidade de destino" hint={unit ? `Selecionada: ${unitName(unit.block, unit.label, labels)}` : `Digite ${labels.group.toLowerCase()} e ${labels.number.toLowerCase()}, ex.: "A 101", "Quadra B Lote 15" ou "Rua 3 Casa 12".`}>
-          <Input ref={unitRef} value={unitQuery} onChange={(e) => { setUnitQuery(e.target.value); setUnitId(null); }} placeholder="Buscar unidade" autoComplete="off" />
-        </Field></div>
-        {unitId && keywords.length > 0 && (
-          <div className="rounded-xl border-2 border-secondary p-3 text-sm" role="status" aria-label="Palavra-chave da unidade">
-            <Badge tone="accent">🔑 Unidade com palavra-chave de entrega</Badge>
-            <ul className="mt-2 space-y-1">{keywords.map((k) => (
-              <li key={k.id}><strong className="text-base tracking-wide">{k.keyword}</strong>{k.carrier ? ` · ${k.carrier}` : ''}{k.recipient_name ? ` · ${k.recipient_name}` : ''}</li>
-            ))}</ul>
-            <p className="text-xs text-muted mt-1">Peça a palavra ao entregador antes de receber. Marque como utilizada em “Palavras-chave dos moradores”.</p>
-          </div>
-        )}
-        {unitId && residents && (
-          <div className="text-sm" aria-label="Moradores da unidade">
-            <p className="text-muted text-xs mb-1">Moradores desta unidade:</p>
-            {residents.length === 0 ? <p className="text-warning">Nenhum morador cadastrado nesta unidade.</p> : (
-              <ul className="flex flex-wrap gap-2">{residents.map((r, i) => (
-                <li key={i} className="rounded-lg border border-line px-2 py-1">{r.name} <Badge tone={r.status === 'active' ? 'success' : r.status === 'pending' ? 'warning' : 'neutral'}>{PERSON_STATUS[r.status] || r.status}</Badge></li>
-              ))}</ul>
-            )}
-          </div>
-        )}
-        {!preregistered && (
-          <div className="rounded-xl border border-line p-3 space-y-2">
-            <label className="flex items-center gap-2 text-sm min-h-11">
-              <input type="checkbox" checked={!!unidentified} onChange={(e) => setUnidentified(e.target.checked ? 'unregistered_resident' : '')} />
-              Morador não identificado
-            </label>
-            {unidentified && (
-              <Field label="Motivo" hint="A encomenda fica guardada normalmente e o síndico é avisado para destinar.">
-                <Select value={unidentified} onChange={(e) => setUnidentified(e.target.value as UnidentifiedReason)}>
-                  {Object.entries(UNIDENTIFIED_REASONS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                </Select>
-              </Field>
-            )}
-          </div>
-        )}
-        {!unitId && unitQuery && (
-          <div className="flex flex-wrap gap-2" role="listbox" aria-label="Unidades encontradas">
-            {candidates.length === 0 && <p className="text-sm text-muted">Nenhuma unidade encontrada.</p>}
-            {candidates.map((u) => (
-              <button type="button" role="option" aria-selected={false} key={u.id}
-                onClick={() => { setUnitId(u.id); setUnitQuery(unitName(u.block, u.label, labels)); trackingRef.current?.focus(); }}
-                className="min-h-10 px-3 rounded-lg border border-line bg-surface hover:bg-surface-2 text-sm">{unitName(u.block, u.label, labels)}</button>
-            ))}
-          </div>
-        )}
-        <div className="grid sm:grid-cols-2 gap-4">
+    <Modal title={preregistered ? 'Conferir pré-registro' : 'Receber encomenda'} step={stepText} onClose={onClose} footer={footer}>
+      {step === 1 && (
+        <div className="space-y-4">
+          <CourierPicker value={courier} onChange={setCourier} courierId={courierId} onSelect={setCourierId} carrier={carrier} onCarrier={setCarrier} ocrEnabled={ocrEnabled} />
           <Field label="Transportadora"><Select value={carrier} onChange={(e) => setCarrier(e.target.value)}>{CARRIERS.map((c) => <option key={c}>{c}</option>)}</Select></Field>
-          <Field label="Rastreio" hint="Leitor USB funciona aqui (digita e dá Enter).">
-            <Input ref={trackingRef} value={tracking} onChange={(e) => setTracking(e.target.value)} maxLength={80} autoComplete="off"
-              onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} />
-          </Field>
-        </div>
-        <div className="grid sm:grid-cols-2 gap-4">
-          <CourierPicker value={courier} onChange={setCourier} courierId={courierId} onSelect={setCourierId} carrier={carrier} ocrEnabled={ocrEnabled} />
           <Field label="Recebido por (porteiro, obrigatório)" hint="Preenchido com quem está logado. Altere se o terminal for compartilhado.">
             <Input value={receiver} onChange={(e) => { receiverEdited.current = true; setReceiver(e.target.value); }} required minLength={2} maxLength={120} autoComplete="name" />
           </Field>
         </div>
-        {!preregistered && (
-          <>
-            <Field label="Destinatário (como está na etiqueta)"><Input value={recipient} onChange={(e) => setRecipient(e.target.value)} maxLength={120} required={batch} /></Field>
-            <Field label="Observações"><Input value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={500} placeholder="Ex.: caixa grande, frágil" /></Field>
-          </>
-        )}
-        {locs.length > 0 && (
-          <div data-tour="receber-local" className="space-y-2">
-            <Field label="Local de guarda" hint={preregistered ? 'Vazio = automático (local com mais espaço).' : 'Sugerido: local com mais espaço livre. Contingência só quando os demais lotarem.'}>
-              <Select value={loc} onChange={(e) => { setLoc(e.target.value); setStored(false); }}>
-                <option value="">{preregistered ? 'Automático' : 'Selecione…'}</option>
-                {locs.map((s) => <option key={s.id} value={s.id} disabled={s.free === 0}>
-                  {locationName(s)}{s.is_contingency ? ' (contingência)' : ''}{s.free !== undefined ? ` — ${s.free} vaga(s)` : ''}
-                </option>)}
-              </Select>
-            </Field>
-            {!preregistered && avail && !suggested && <Alert tone="danger">Todos os locais estão lotados. O administrador precisa liberar espaço ou cadastrar uma área de contingência.</Alert>}
-            {!preregistered && chosen && (
-              <label className="flex items-start gap-2 text-sm min-h-11 rounded-xl border border-line p-3">
-                <input type="checkbox" checked={stored} onChange={(e) => setStored(e.target.checked)} className="mt-1" />
-                <span>Guardei fisicamente em <strong>{locationName(chosen)}</strong>.</span>
-              </label>
+      )}
+
+      {step === 2 && (
+        <div className="space-y-4">
+          <p className="text-sm text-muted">Entregador: <span className="text-text font-medium">{courier}</span> · {carrier}{done.length > 0 && ` · ${done.length} já registrada(s)`}</p>
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Foto da etiqueta <span className="text-muted font-normal">(opcional, até 8 fotos)</span></p>
+            <PhotoGallery photos={photos} onChange={setPhotos} locked={saved || busy} label={ocrEnabled ? 'Escanear etiqueta (câmera)' : 'Fotografar etiqueta'}
+              onRetry={savedPackage.current ? save : undefined} />
+            {!saved && !busy && photos.length < 8 && <DemoLabelSample onPick={async (b) => setPhotos([...photos, await preparePhoto(b)])} />}
+            {photo && ocrEnabled && (
+              <Button type="button" variant="secondary" onClick={() => runOcr()} loading={ocrBusy}><ScanText className="w-4 h-4" /> {ocr ? 'Ler etiqueta de novo' : 'Ler etiqueta automaticamente'}</Button>
+            )}
+            {ocrMsg && <Alert tone={ocr && ocr.confidence >= 70 ? 'info' : 'warning'}>{ocrMsg}</Alert>}
+            {ocr?.match && <Alert tone={ocr.match.status === 'matched' ? 'success' : 'warning'}>{MATCH_TEXT[ocr.match.status]}</Alert>}
+            {ocr && [...ocr.alerts, ...(ocr.match?.alerts || [])].length > 0 && (
+              <ul className="text-xs list-disc pl-4" aria-label="Alertas da leitura">{[...ocr.alerts, ...(ocr.match?.alerts || [])].map((a, i) => <li key={i}>{a}</li>)}</ul>
+            )}
+            {ocr && (
+              <details className="text-xs"><summary className="cursor-pointer text-muted min-h-8">Detalhes da leitura</summary>
+                <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1" aria-label="Campos lidos">
+                  {([['Destinatário', ocr.recipientName], ['Remetente', ocr.senderName], ['Complemento', ocr.complement], ['Rastreio', ocr.trackingCode],
+                    ['Pedido', ocr.orderNumber], ['Nota fiscal', ocr.invoiceNumber]] as const).map(([k, v]) => (
+                    <React.Fragment key={k}><dt className="text-muted">{k}</dt><dd className="break-all">{v || 'não identificado'}</dd></React.Fragment>
+                  ))}
+                </dl>
+                <ul className="mt-1 space-y-0.5">{ocr.evidence.map((e, i) => <li key={i}><span className="text-muted">{e.field}:</span> “{e.text}”</li>)}</ul>
+              </details>
             )}
           </div>
-        )}
-        {error && <Alert tone="danger">{error}</Alert>}
-        <Button type="submit" loading={busy} className="w-full" data-tour="receber-salvar">{preregistered ? 'Confirmar recebimento' : 'Registrar encomenda'}</Button>
-        {batch && results.length > 0 && (
-          <div className="space-y-1">
-            <p className="text-sm font-medium">Nesta sequência: {results.filter((r) => r.ok).length} registrada(s){results.some((r) => !r.ok) ? `, ${results.filter((r) => !r.ok).length} com pendência` : ''}</p>
-            <ul className="text-sm divide-y divide-line" aria-label="Resultado do registro rápido">
-              {results.map((r) => <li key={r.key} className={`py-1 ${r.ok ? '' : 'text-danger'}`}>{r.ok ? '✓' : '!'} {r.text}</li>)}
-            </ul>
-          </div>
-        )}
-      </Card>
-    </form>
+
+          <Field label="Unidade de destino" hint={unit ? `Selecionada: ${unitName(unit.block, unit.label, labels)}` : `Digite ${labels.group.toLowerCase()} e ${labels.number.toLowerCase()}, ex.: "A 101", "Quadra B Lote 15" ou "Rua 3 Casa 12".`}>
+            <Input ref={unitRef} value={unitQuery} onChange={(e) => { setUnitQuery(e.target.value); setUnitId(null); }} placeholder="Buscar unidade" autoComplete="off" />
+          </Field>
+          {!unitId && unitQuery && (
+            <div className="flex flex-wrap gap-2" role="listbox" aria-label="Unidades encontradas">
+              {candidates.length === 0 && <p className="text-sm text-muted">Nenhuma unidade encontrada.</p>}
+              {candidates.map((u) => (
+                <button type="button" role="option" aria-selected={false} key={u.id}
+                  onClick={() => { setUnitId(u.id); setUnitQuery(unitName(u.block, u.label, labels)); }}
+                  className="min-h-11 px-3 rounded-lg border border-line bg-surface hover:bg-surface-2 text-sm">{unitName(u.block, u.label, labels)}</button>
+              ))}
+            </div>
+          )}
+          {unitId && keywords.length > 0 && (
+            <div className="rounded-xl border-2 border-secondary p-3 text-sm" role="status" aria-label="Palavra-chave da unidade">
+              <Badge tone="accent">🔑 Unidade com palavra-chave de entrega</Badge>
+              <ul className="mt-2 space-y-1">{keywords.map((k) => (
+                <li key={k.id}><strong className="text-base tracking-wide">{k.keyword}</strong>{k.carrier ? ` · ${k.carrier}` : ''}{k.recipient_name ? ` · ${k.recipient_name}` : ''}</li>
+              ))}</ul>
+              <p className="text-xs text-muted mt-1">Peça a palavra ao entregador antes de receber. Depois, marque como utilizada em “Palavras-chave dos moradores”, na tela de Encomendas.</p>
+            </div>
+          )}
+          {unitId && residents && (
+            <div className="text-sm" aria-label="Moradores da unidade">
+              <p className="text-muted text-xs mb-1">Moradores desta unidade:</p>
+              {residents.length === 0 ? <p className="text-warning">Nenhum morador cadastrado nesta unidade.</p> : (
+                <ul className="flex flex-wrap gap-2">{residents.map((r, i) => (
+                  <li key={i} className="rounded-lg border border-line px-2 py-1">{r.name} <Badge tone={r.status === 'active' ? 'success' : r.status === 'pending' ? 'warning' : 'neutral'}>{PERSON_STATUS[r.status] || r.status}</Badge></li>
+                ))}</ul>
+              )}
+            </div>
+          )}
+          {!preregistered && <Field label="Destinatário (como está na etiqueta)"><Input value={recipient} onChange={(e) => setRecipient(e.target.value)} maxLength={120} /></Field>}
+          <Field label="Rastreio" hint="Leitor USB funciona aqui (digita e dá Enter).">
+            <Input ref={trackingRef} value={tracking} onChange={(e) => setTracking(e.target.value)} maxLength={80} autoComplete="off" />
+          </Field>
+          {locs.length > 0 && (
+            <div className="space-y-2">
+              <Field label="Local de guarda" hint={preregistered ? 'Vazio = automático (local com mais espaço).' : 'Sugerido: local com mais espaço livre. Contingência só quando os demais lotarem.'}>
+                <Select value={loc} onChange={(e) => { setLoc(e.target.value); setStored(false); }}>
+                  <option value="">{preregistered ? 'Automático' : 'Selecione…'}</option>
+                  {locs.map((s) => <option key={s.id} value={s.id} disabled={s.free === 0}>
+                    {locationName(s)}{s.is_contingency ? ' (contingência)' : ''}{s.free !== undefined ? ` — ${s.free} vaga(s)` : ''}
+                  </option>)}
+                </Select>
+              </Field>
+              {!preregistered && avail && !suggested && <Alert tone="danger">Todos os locais estão lotados. O administrador precisa liberar espaço ou cadastrar uma área de contingência.</Alert>}
+              {!preregistered && chosen && (
+                <label className="flex items-start gap-2 text-sm min-h-11 rounded-xl border border-line p-3">
+                  <input type="checkbox" checked={stored} onChange={(e) => setStored(e.target.checked)} className="mt-1" />
+                  <span>Guardei fisicamente em <strong>{locationName(chosen)}</strong>.</span>
+                </label>
+              )}
+            </div>
+          )}
+          {!preregistered && (
+            <details className="rounded-xl border border-line px-3">
+              <summary className="cursor-pointer text-sm min-h-11 flex items-center">Mais opções (observações, morador não identificado)</summary>
+              <div className="space-y-3 pb-3">
+                <Field label="Observações"><Input value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={500} placeholder="Ex.: caixa grande, frágil" /></Field>
+                <label className="flex items-center gap-2 text-sm min-h-11">
+                  <input type="checkbox" checked={!!unidentified} onChange={(e) => setUnidentified(e.target.checked ? 'unregistered_resident' : '')} />
+                  Morador não identificado
+                </label>
+                {unidentified && (
+                  <Field label="Motivo" hint="A encomenda fica guardada normalmente e o síndico é avisado para destinar.">
+                    <Select value={unidentified} onChange={(e) => setUnidentified(e.target.value as UnidentifiedReason)}>
+                      {Object.entries(UNIDENTIFIED_REASONS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    </Select>
+                  </Field>
+                )}
+              </div>
+            </details>
+          )}
+        </div>
+      )}
+
+      {step === 3 && (
+        <div className="space-y-4">
+          <Alert tone="success">Encomenda registrada para {done[done.length - 1]}. Moradores da unidade avisados.</Alert>
+          <p className="text-sm text-muted">{done.length} encomenda(s) de <span className="text-text font-medium">{courier}</span> até agora. Tem mais alguma deste entregador?</p>
+        </div>
+      )}
+
+      {step === 4 && (
+        <div className="space-y-3">
+          <p className="text-sm">Entregador: <strong>{courier}</strong> · {carrier}<br />Recebido por: {receiver}</p>
+          <p className="font-semibold">{done.length} encomenda(s) recebida(s)</p>
+          <ol className="divide-y divide-line text-sm list-decimal pl-5" aria-label="Encomendas recebidas">
+            {done.map((d, i) => <li key={i} className="py-2">{d}</li>)}
+          </ol>
+        </div>
+      )}
+    </Modal>
     {ocrConfirm && ocr && <OcrConfirm ocr={ocr} unit={unit} labels={labels} onConfirm={() => setOcrConfirm(false)} onEdit={editOcr} />}
     </>
   );

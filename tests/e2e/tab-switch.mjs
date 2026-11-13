@@ -26,7 +26,10 @@ await page.waitForTimeout(1500);
 
 // Marca da instância atual da página: some em reload.
 await page.evaluate(() => { window.__ppMark = 'viva'; });
-const field = page.getByLabel('Rastreio');
+await page.getByRole('button', { name: 'Receber encomenda' }).click();
+await page.getByLabel('Nome do entregador (obrigatório)').fill('Entregador Lab');
+await page.getByRole('button', { name: 'Avançar', exact: true }).click();
+const field = page.getByLabel('Rastreio', { exact: true });
 await field.fill('BR123TESTE');
 const before = contextCalls.length;
 
@@ -47,6 +50,7 @@ assert.equal(contextCalls.length - before, 0, 'voltar à aba não recarrega o co
 assert.match(page.url(), new RegExp(`/c/${lab.slug}/portaria`), 'rota mantida');
 
 // Logout e login de OUTRO usuário continuam recarregando o contexto (não pode herdar o anterior).
+await page.getByRole('dialog').getByRole('button', { name: 'Fechar' }).click();
 await page.getByRole('button', { name: /conta|perfil|usuário/i }).first().click().catch(() => {});
 const sair = page.getByRole('button', { name: /^Sair/ }).or(page.getByRole('menuitem', { name: /^Sair/ }));
 await sair.first().click();
