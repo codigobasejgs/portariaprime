@@ -7,9 +7,9 @@ export interface Screen { file: string; title: string; caption: string; width: n
 
 export const SCREENS = {
   painel: { file: '/screens/painel-desktop.webp', title: 'Visão geral do síndico', caption: 'Aguardando agora, acima do prazo, ocupação e o que precisa de atenção.', width: 1440, height: 900 },
-  recebimento: { file: '/screens/recebimento-desktop.webp', title: 'Recebimento na portaria', caption: 'Unidade, destinatário, rastreio e local conferidos antes de salvar.', width: 1440, height: 900 },
+  recebimento: { file: '/screens/recebimento-desktop.webp', title: 'Recebimento na portaria', caption: 'Passo a passo: unidade, destinatário, rastreio e local conferidos antes de salvar.', width: 1440, height: 900 },
   armazenamento: { file: '/screens/armazenamento-desktop.webp', title: 'Ocupação dos locais', caption: 'Capacidade e ocupação de cada estante ou sala.', width: 1440, height: 900 },
-  portariaMobile: { file: '/screens/portaria-mobile.webp', title: 'Portaria no celular', caption: 'Receber, Entregar e Buscar em destaque.', width: 390, height: 844 },
+  portariaMobile: { file: '/screens/portaria-mobile.webp', title: 'Portaria no celular', caption: 'Receber encomenda e Entregar ao morador em destaque; embaixo, o que aguarda retirada.', width: 390, height: 844 },
   morador: { file: '/screens/morador-mobile.webp', title: 'App do morador', caption: 'Quantas encomendas aguardam retirada e o botão do QR em cada uma.', width: 390, height: 844 },
   comprovante: { file: '/screens/comprovante-desktop.webp', title: 'Comprovante de retirada', caption: 'Protocolo, quem retirou, assinatura e foto do item.', width: 1440, height: 900 },
   marcaA: { file: '/screens/marca-a-desktop.webp', title: 'Condomínio A', caption: 'Logo e cores próprias do condomínio.', width: 1440, height: 900 },

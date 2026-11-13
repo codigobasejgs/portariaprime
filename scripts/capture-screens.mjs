@@ -156,13 +156,13 @@ try {
   await s.goto(`${APP}/c/${A.slug}/configuracoes?m=plano`);
   await s.getByText(/Mês grátis/).first().waitFor();
   await shot(s, 'assinatura-desktop', '/c/:slug/configuracoes?m=plano', 'Mês grátis ativo com início, fim e plano escolhido');
-  await s.goto(`${APP}/c/${A.slug}/portaria?aba=buscar`);
+  await s.goto(`${APP}/c/${A.slug}/portaria`);
   await s.getByRole('heading', { name: 'Encomendas' }).waitFor();
   await shot(s, 'marca-a-desktop', '/c/:slug/portaria', 'Condomínio A com marca azul');
   const dB = await ctx({ width: 1440, height: 900 });
   const sb = await dB.newPage();
   await login(sb, sindB, `/c/${B.slug}/portaria`);
-  await sb.goto(`${APP}/c/${B.slug}/portaria?aba=buscar`);
+  await sb.goto(`${APP}/c/${B.slug}/portaria`);
   await sb.getByRole('heading', { name: 'Encomendas' }).waitFor();
   await shot(sb, 'marca-b-desktop', '/c/:slug/portaria', 'Condomínio B com marca verde; dados separados de A');
 
@@ -179,8 +179,10 @@ try {
   await p.getByRole('listbox', { name: 'Unidades encontradas' }).getByRole('option').first().click();
   await p.getByLabel(/Rastreio/).fill('DEMO-ML-8841');
   await p.getByLabel(/Destinatário/).fill('Ana Demo');
-  await shot(p, 'recebimento-desktop', '/c/:slug/portaria', 'Recebimento preenchido, antes de salvar (sem etiqueta real)');
-  await p.goto(`${APP}/c/${A.slug}/portaria?aba=buscar`);
+  await p.getByText('Etapa 2 de 3').waitFor();
+  await p.evaluate(() => document.activeElement?.blur());
+  await shot(p, 'recebimento-desktop', '/c/:slug/portaria', 'Recebimento em etapas: etapa 2 preenchida, antes de salvar (sem etiqueta real)');
+  await p.goto(`${APP}/c/${A.slug}/portaria`);
   await p.getByRole('button', { name: 'Entregar', exact: true }).first().click();
   await p.getByLabel('Quem está retirando').fill('Marina Costa');
   await p.getByRole('button', { name: 'Avançar', exact: true }).click();
@@ -194,15 +196,18 @@ try {
   await p.getByRole('dialog').locator('input[type=file]').setInputFiles({ name: 'item.png', mimeType: 'image/png', buffer: png1 });
   await p.getByAltText('Foto do item entregue').waitFor();
   await p.getByRole('button', { name: 'Confirmar entrega' }).click();
-  await p.getByRole('button', { name: 'Ver comprovante' }).click();
+  await p.getByRole('button', { name: 'Encerrar entrega' }).click();
+  await p.getByRole('tab', { name: 'Histórico' }).click();
+  await p.getByRole('button', { name: 'Buscar', exact: true }).click();
+  await p.getByRole('button', { name: 'Comprovante' }).first().click();
   await p.getByRole('dialog', { name: 'Comprovante de retirada' }).getByText('Retirada por').waitFor();
   await shot(p, 'comprovante-desktop', '/c/:slug/portaria (comprovante)', 'Comprovante após retirada com assinatura e foto sintéticas (código de verificação desfocado)', ['[data-verify-code]']);
   const mP = await ctx({ width: 390, height: 844 }, true);
   const pm = await mP.newPage();
   await login(pm, port, `/c/${A.slug}/portaria`);
-  await pm.goto(`${APP}/c/${A.slug}/portaria?aba=buscar`);
+  await pm.goto(`${APP}/c/${A.slug}/portaria`);
   await pm.getByRole('heading', { name: 'Encomendas' }).waitFor();
-  await shot(pm, 'portaria-mobile', '/c/:slug/portaria (Buscar)', 'Portaria no celular: aguardando retirada');
+  await shot(pm, 'portaria-mobile', '/c/:slug/portaria', 'Portaria no celular: aguardando retirada');
 
   // Morador: Início com encomendas e QR desfocado.
   const mM = await ctx({ width: 390, height: 844 }, true);
