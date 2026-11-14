@@ -1,31 +1,63 @@
 /**
- * Motor Whaileys (WhatsApp com botões e listas). Credenciais só no servidor (Vercel):
- * WHAILEYS_API_URL, WHAILEYS_INSTANCE, WHAILEYS_TOKEN, WHAILEYS_WEBHOOK_SECRET. Independente da Evolution.
+ * Motor Whaileys (WhatsApp com botões e listas). Credenciais só no servidor (Vercel). Independente da Evolution.
+ *  - Número da plataforma (opcional): WHAILEYS_INSTANCE, WHAILEYS_TOKEN, WHAILEYS_WEBHOOK_SECRET.
+ *  - Número de cada condomínio: instância ppia-<condomínio> criada com WHAILEYS_PARTNER_KEY (o motor só deixa essa
+ *    chave mexer em instâncias ppia-*); token e segredo de cada uma ficam em assistant_channels (só service_role).
  */
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { optionalEnv } from './env.js';
+import { env, optionalEnv } from './env.js';
 import type { Card } from './whatsapp-card.js';
 export * from './whatsapp-card.js';
 
-export const whaileysEnabled = () => !!(optionalEnv('WHAILEYS_API_URL') && optionalEnv('WHAILEYS_INSTANCE') && optionalEnv('WHAILEYS_TOKEN') && optionalEnv('WHAILEYS_WEBHOOK_SECRET'));
+/** Instância no motor e o token que opera só ela. */
+export interface Channel { instance: string; token: string }
+export interface SessionStatus { state: string; qr: string | null; pairingCode?: string | null; me: { id: string | null } | null }
 
-async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
+export const whaileysEnabled = () => !!(optionalEnv('WHAILEYS_API_URL') && optionalEnv('WHAILEYS_INSTANCE') && optionalEnv('WHAILEYS_TOKEN') && optionalEnv('WHAILEYS_WEBHOOK_SECRET'));
+/** Conexão do WhatsApp da IA pelo painel de cada condomínio. */
+export const partnerEnabled = () => !!(optionalEnv('WHAILEYS_API_URL') && optionalEnv('WHAILEYS_PARTNER_KEY'));
+export const channelName = (tenantId: string) => `ppia-${tenantId.toLowerCase()}`;
+export const CHANNEL_RE = /^ppia-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+export class WhaileysError extends Error { constructor(message: string, public status: number) { super(message); } }
+
+async function request<T>(path: string, key: string, init: RequestInit = {}): Promise<T> {
   const base = (optionalEnv('WHAILEYS_API_URL') || '').replace(/\/+$/, '');
-  const r = await fetch(`${base}/sessions/${encodeURIComponent(optionalEnv('WHAILEYS_INSTANCE') || '')}${path}`, {
+  const r = await fetch(`${base}${path}`, {
     ...init,
-    headers: { 'x-api-key': optionalEnv('WHAILEYS_TOKEN') || '', 'content-type': 'application/json', ...(init.headers || {}) },
+    headers: { 'x-api-key': key, 'content-type': 'application/json', ...(init.headers || {}) },
     signal: AbortSignal.timeout(20000),
   });
   const d: any = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(d?.error ? `WhatsApp: ${String(d.error).slice(0, 120)}` : `WhatsApp indisponível (HTTP ${r.status}).`);
+  if (!r.ok) throw new WhaileysError(d?.error ? `WhatsApp: ${String(d.error).slice(0, 120)}` : `WhatsApp indisponível (HTTP ${r.status}).`, r.status);
   return d as T;
 }
 
-export const whaileysStatus = () => call<{ state: string; qr: string | null; me: { id: string | null } | null }>('');
-export const whaileysConnect = () => call<{ state: string; qr: string | null }>('/connect', { method: 'POST', body: '{}' });
-export const whaileysSend = (to: string, card: Card) => call<{ messageId: string }>('/send', { method: 'POST', body: JSON.stringify({ to, ...card }) });
+const platform = (): Channel => ({ instance: optionalEnv('WHAILEYS_INSTANCE') || '', token: optionalEnv('WHAILEYS_TOKEN') || '' });
+const call = <T>(path: string, init: RequestInit = {}, ch: Channel = platform()) =>
+  request<T>(`/sessions/${encodeURIComponent(ch.instance)}${path}`, ch.token, init);
+
+export const whaileysStatus = (ch?: Channel) => call<SessionStatus>('', {}, ch);
+/** Com telefone (55 + DDD + número), o motor devolve também o código de pareamento de 8 dígitos. */
+export const whaileysConnect = (ch?: Channel, phone?: string) => call<SessionStatus>('/connect', { method: 'POST', body: JSON.stringify(phone ? { phone } : {}) }, ch);
+export const whaileysLogout = (ch: Channel) => call<{ ok: boolean }>('', { method: 'DELETE' }, ch);
+export const whaileysSend = (to: string, card: Card, ch?: Channel) => call<{ messageId: string }>('/send', { method: 'POST', body: JSON.stringify({ to, ...card }) }, ch);
 /** Números autorizados: o motor usa para descobrir o número de quem escreve só com LID (privacidade do WhatsApp). */
-export const whaileysKnownPhones = (phones: string[]) => call('/known-phones', { method: 'POST', body: JSON.stringify({ phones: phones.slice(0, 50) }) });
+export const whaileysKnownPhones = (phones: string[], ch?: Channel) => call('/known-phones', { method: 'POST', body: JSON.stringify({ phones: phones.slice(0, 50) }) }, ch);
+
+/**
+ * Cria a instância do condomínio no motor (chave de parceiro). Já existente sem registro aqui (ex.: falha entre criar e
+ * gravar): troca token e segredo, porque os antigos não aparecem de novo. Devolve as credenciais novas.
+ */
+export async function ensureInstance(name: string, webhookUrl: string): Promise<{ token: string; webhookSecret: string }> {
+  const key = env('WHAILEYS_PARTNER_KEY');
+  try {
+    return await request('/instances', key, { method: 'POST', body: JSON.stringify({ name, webhookUrl }) });
+  } catch (e) {
+    if (!(e instanceof WhaileysError) || e.status !== 409) throw e;
+    return request(`/instances/${encodeURIComponent(name)}`, key, { method: 'PATCH', body: JSON.stringify({ webhookUrl, rotateToken: true, rotateSecret: true }) });
+  }
+}
 
 /** HMAC-SHA256 de `${timestamp}.${corpo}` com o segredo da instância; janela de 5 minutos, tempo constante. */
 export function verifyWhaileysSignature(raw: string, timestamp: string | null, signature: string | null,
@@ -56,4 +88,3 @@ export function sender(key: IncomingKey): { phone: string; replyTo: string } | {
   if (!/^\d{12,13}$/.test(phone)) return { ignore: 'sem número', lidOnly: /@lid$/.test(remote) };
   return { phone, replyTo: remote };
 }
-

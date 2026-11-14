@@ -205,7 +205,8 @@ export function WhatsAppCard() {
   return (
     <Card className="space-y-3">
       <p className="font-semibold">WhatsApp do condomínio</p>
-      <p className="text-sm text-muted">Conecte um número do condomínio para enviar avisos de chegada e retirada. A entrega da mensagem depende do WhatsApp e do telefone do morador.</p>
+      <p className="text-sm text-muted">Conecte um número do condomínio para enviar avisos de chegada e retirada. A entrega da mensagem depende do WhatsApp e do telefone do morador.
+        O WhatsApp do Portaria Prime IA (equipe) é conectado à parte, em Configurações › Assistente no WhatsApp.</p>
       {st && <Badge tone={st.connected ? 'success' : 'warning'}>{st.connected ? 'Conectado' : 'Não conectado'}</Badge>}
       {qr && <img src={qr} alt="QR Code para conectar o WhatsApp" className="w-56 h-56 bg-white p-2 rounded-xl" />}
       <div className="flex flex-wrap gap-2">

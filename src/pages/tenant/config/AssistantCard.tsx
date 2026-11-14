@@ -6,6 +6,7 @@ import { rpc } from '../../../lib/api';
 import { useTenant } from '../../../lib/tenant';
 import { Alert, Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, useAction } from '../../../components/ui';
 import { LEVELS, type Level } from '../../../../api/_lib/assistant-text';
+import { AssistantConnect } from './AssistantConnect';
 
 // Número público do assistente: vem da configuração do build (definido quando o chip da plataforma for pareado).
 const ASSISTANT_NUMBER = (import.meta.env.VITE_ASSISTANT_WHATSAPP as string | undefined)?.trim() || null;
@@ -64,9 +65,8 @@ export function AssistantCard() {
           <div key={k} className="rounded-xl border border-line p-3 text-sm"><p className="font-semibold">Nível {i + 1} · {LEVELS[k].title}</p><p className="text-muted text-xs mt-1">{LEVELS[k].desc}</p></div>
         ))}
       </div>
-      {ASSISTANT_NUMBER
-        ? <p className="text-sm">Para começar, a pessoa autorizada manda <strong>“oi”</strong> para o WhatsApp do Portaria Prime IA: <strong>{ASSISTANT_NUMBER}</strong>.</p>
-        : <Alert>O número do Portaria Prime IA aparece aqui assim que o WhatsApp do assistente estiver no ar. Você já pode autorizar os números da equipe.</Alert>}
+      {hasWhatsapp && !DEMO && <AssistantConnect />}
+      {ASSISTANT_NUMBER && <p className="text-sm">Sem número próprio conectado, a equipe autorizada também pode mandar <strong>“oi”</strong> para o WhatsApp do Portaria Prime IA: <strong>{ASSISTANT_NUMBER}</strong>.</p>}
       {error ? <Alert tone="danger">{error} <button className="underline" onClick={load}>Tentar novamente</button></Alert>
         : !rows ? <Spinner /> : rows.length === 0 ? <Empty title="Nenhum número autorizado">Autorize o WhatsApp do síndico ou do zelador para começar.</Empty> : (
           <ul className="divide-y divide-line" aria-label="Números autorizados">

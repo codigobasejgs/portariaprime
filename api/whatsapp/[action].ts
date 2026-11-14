@@ -4,11 +4,13 @@
  *   POST /api/whatsapp/status   { tenantId } -> conectado ou não
  * O nome da instância é derivado no servidor (pp-<tenant>); o cliente nunca
  * informa URL, instância ou destinatário. Exige permissão "settings" e plano com WhatsApp.
+ * /api/whatsapp/ia-* = WhatsApp do Portaria Prime IA (motor Whaileys): ver api/_lib/assistant-channel.ts.
  */
 import { handler, json, readJson, isUuid, HttpError } from '../_lib/http.js';
 import { requireUser, serviceClient, rpcError } from '../_lib/supabase.js';
 import { env } from '../_lib/env.js';
 import { sendWhatsApp } from '../_lib/channels.js';
+import { assistantChannel } from '../_lib/assistant-channel.js';
 
 function findQr(obj: any, depth = 0): string | null {
   if (!obj || depth > 4 || typeof obj !== 'object') return null;
@@ -28,6 +30,7 @@ export const POST = handler(async (request) => {
   const { tenantId, phone } = await readJson(request, 1024);
   if (!isUuid(tenantId)) throw new HttpError(400, 'Condomínio inválido.');
   const { client } = await requireUser(request);
+  if (action?.startsWith('ia-')) return assistantChannel(client, tenantId, action.slice(3), phone);
 
   // Teste dirigido a um número informado pelo administrador, com texto fixo do servidor.
   if (action === 'test') {
