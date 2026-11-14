@@ -16,6 +16,8 @@ const EXAMPLES: { label: string; say: string; intent?: Intent; photo?: boolean }
   { label: 'Pendências do bloco A', say: 'Quem está com encomenda pendente no bloco A?', intent: { name: 'pending_packages', args: { block: 'A' } } },
   { label: 'Analisar últimos 6 meses', say: 'Analise a operação dos últimos 6 meses', intent: { name: 'report', args: { period: '6m' } } },
   { label: 'Cadastros pendentes', say: 'Tem cadastro de morador para aprovar?', intent: { name: 'list_access_requests', args: {} } },
+  { label: 'Reenviar aviso das atrasadas', say: 'Reenvia o aviso de todas as encomendas paradas há mais de 3 dias', intent: { name: 'bulk_resend', args: { min_days: 3 } } },
+  { label: 'Ver estantes', say: 'Como estão as estantes?', intent: { name: 'storage_status', args: {} } },
   { label: 'Foto de etiqueta', say: '📷 [foto da etiqueta]', photo: true },
 ];
 

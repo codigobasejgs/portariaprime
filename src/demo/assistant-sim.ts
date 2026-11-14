@@ -10,9 +10,10 @@ import type { Link, Svc } from '../../api/_lib/assistant-core';
  * Executa como a síndica fictícia; o nível escolhido no simulador é conferido aqui como no banco real.
  */
 const RANK: Record<Level, number> = { basic: 1, intermediate: 2, advanced: 3 };
-const NEED: Record<string, Level> = { receive_package: 'advanced', register_courier: 'advanced' };
+const NEED: Record<string, Level> = { receive_package: 'advanced', register_courier: 'advanced', import_residents: 'advanced' };
 const pending = new Map<string, { action: string; params: any; summary: string; status: string; expires: number }>();
-const ref = (id: string) => id.replace(/-/g, '').slice(0, 6).toUpperCase();
+// Ids fictícios da demonstração começam com zeros: a referência usa o fim do id para ficar distinta (no banco real é o começo).
+const ref = (id: string) => id.replace(/-/g, '').slice(-6).toUpperCase();
 const days = (iso: string) => Math.floor((Date.now() - Date.parse(iso)) / 86400_000);
 const call = (fn: string, args: Record<string, unknown>) => HANDLERS[fn]({ p_tenant: TENANT, ...args });
 const unitOf = (id: string | null) => { const u = store.unit(id); return u ? [u.block, u.label].filter(Boolean).join(' ') : ''; };
@@ -60,6 +61,19 @@ function read(kind: string, a: any): any {
       rejected: inPeriod.filter((p) => p.rejected_at).length, unidentified: inPeriod.filter((p) => p.unidentified_reason).length,
       couriers: new Set(inPeriod.map((p) => (p.courier_name || '').trim().toLowerCase()).filter(Boolean)).size };
   }
+  if (kind === 'find_packages') {
+    const q = String(a.q ?? '').trim().toUpperCase().replace(/^#/, '');
+    return waiting.filter((p) => (!a.id || p.id === a.id) && (!q || ref(p.id) === q || (p.tracking_code || '').toUpperCase() === q || (q.length >= 3 && (p.recipient_name || '').toUpperCase().includes(q)))
+      && (a.min_days == null || days(p.received_at) >= a.min_days) && (!a.block || plain(store.unit(p.unit_id)?.block) === plain(a.block)))
+      .sort((x, y) => x.received_at.localeCompare(y.received_at)).slice(0, 20)
+      .map((p) => ({ id: p.id, ref: ref(p.id), unit: unitOf(p.unit_id), carrier: p.carrier, recipient: p.recipient_name, tracking: p.tracking_code, storage: null,
+        storage_id: p.storage_location_id, days: days(p.received_at), rejected: !!p.rejected_at, unidentified: !!p.unidentified_reason }));
+  }
+  if (kind === 'unit_residents') return store.s.units.filter((u) => u.active && (!a.block || plain(u.block) === plain(a.block)) && plain(u.label) === plain(a.unit)).slice(0, 3)
+    .map((u) => ({ unit: [u.block, u.label].filter(Boolean).join(' '), residents: call('unit_residents_for_staff', { p_unit: u.id }) }));
+  if (kind === 'storage') return call('storage_availability', {}).map((s: any) => ({ id: s.id, name: [s.concierge, s.rack, s.shelf].filter(Boolean).join(' › ') || s.code, free: s.free, capacity: s.capacity }));
+  if (kind === 'invite_preview') return call('resident_invite_preview', { p_channel: 'whatsapp', p_limit: 100 });
+  if (kind === 'units') return store.s.units.map((u) => ({ id: u.id, block: u.block, label: u.label, active: u.active }));
   if (kind === 'match_label') return { status: 'matched', unit_id: store.s.units[0]?.id };
   if (kind === 'consume_ocr') return true;
   throw new Error('Consulta desconhecida.');
@@ -72,6 +86,28 @@ function execute(action: string, a: any) {
   if (action === 'keyword_used') return call('delivery_keyword_mark_used', { p_id: a.keyword_id });
   if (action === 'receive_package') return call('receive_and_store', { p_idempotency_key: `wa-${crypto.randomUUID()}`, p_unit: a.unit_id, p_tracking: a.tracking, p_carrier: a.carrier,
     p_recipient: a.recipient, p_notes: 'Registrada pelo assistente no WhatsApp.', p_storage_location: a.storage_location_id, p_courier: a.courier, p_received_by_name: a.received_by });
+  if (action === 'reject_resident') return call('decide_access_request', { p_request: a.request_id, p_approve: false, p_unit: null, p_reason: a.reason });
+  if (action === 'mark_unidentified') return call('package_mark_unidentified', { p_package: a.package_id, p_reason: a.reason });
+  if (action === 'move_package') return call('move_package', { p_package: a.package_id, p_storage_location: a.storage_location_id, p_reason: null });
+  if (action === 'resend_notice') return { jobs: 1 };
+  if (action === 'cancel_package') return call('resolve_package', { p_package: a.package_id, p_status: a.status, p_reason: a.reason });
+  if (action === 'keyword_cancel') return call('delivery_keyword_cancel', { p_id: a.keyword_id });
+  if (action === 'keyword_create') {
+    const k = { id: crypto.randomUUID(), unit_id: a.unit_id, created_by: store.userId, keyword: a.keyword, carrier: a.carrier || null, recipient_name: a.recipient || null,
+      note: 'Cadastrada pelo assistente no WhatsApp.', valid_until: null, expires_at: null, status: 'active' as const, used_at: null, created_at: nowIso() };
+    store.s.keywords.unshift(k); store.changed('delivery_keywords');
+    return { id: k.id, keyword: k.keyword };
+  }
+  if (action === 'invite_residents') return call('resident_invite_send', { p_channel: 'whatsapp', p_limit: a.limit });
+  if (action === 'import_residents') return call('resident_import_save', { p_rows: a.rows, p_stats: a.stats });
+  if (action === 'bulk_resend' || action === 'bulk_return') {
+    let ok = 0; const failed: { ref: string; error: string }[] = [];
+    for (const id of (a.package_ids as string[]).slice(0, 20)) {
+      try { if (action === 'bulk_return') call('resolve_package', { p_package: id, p_status: 'DEVOLVIDA', p_reason: a.reason }); ok++; }
+      catch (e: any) { failed.push({ ref: ref(id), error: e?.message || 'falha' }); }
+    }
+    return { ok, failed };
+  }
   throw new Error('Ação indisponível na demonstração.');
 }
 

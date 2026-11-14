@@ -7,8 +7,8 @@ export type Period = 'today' | 'month' | '3m' | '6m' | 'year';
 export const PERIODS: Record<Period, string> = { today: 'Hoje', month: 'Último mês', '3m': 'Últimos 3 meses', '6m': 'Últimos 6 meses', year: 'Último ano' };
 export const LEVELS: Record<Level, { title: string; desc: string }> = {
   basic: { title: 'Básico', desc: 'Consultas, pendências e relatórios. Não altera nada.' },
-  intermediate: { title: 'Intermediário', desc: 'Básico + ações (aprovar cadastro, destinar, devolver, palavra-chave), sempre com confirmação.' },
-  advanced: { title: 'Avançado', desc: 'Intermediário + áudio, foto de etiqueta e de CNH, sempre com confirmação.' },
+  intermediate: { title: 'Intermediário', desc: 'Básico + ações (encomendas, avisos, cadastros, convites, palavras-chave e lotes de até 20), sempre com confirmação.' },
+  advanced: { title: 'Avançado', desc: 'Intermediário + áudio, foto de etiqueta e de CNH e planilha de moradores, sempre com confirmação.' },
 };
 const RANK: Record<Level, number> = { basic: 1, intermediate: 2, advanced: 3 };
 export const allows = (level: Level, need: Level) => RANK[level] >= RANK[need];
@@ -20,21 +20,29 @@ export interface Opt { id: string; title: string }
 
 /** Menu principal conforme o papel e o nível do número. */
 export function menu(who: { full_name: string; tenant_name: string; level: Level; is_admin: boolean; can_approve: boolean }): { text: string; options: Opt[] } {
-  const options: Opt[] = [{ id: 'today', title: '📋 Pendências de hoje' }, { id: 'pending', title: '📦 Aguardando retirada' }];
+  // Lista do WhatsApp: até 10 linhas.
+  const options: Opt[] = [{ id: 'today', title: '📋 Pendências de hoje' }, { id: 'pending', title: '📦 Aguardando retirada' }, { id: 'late', title: '⏰ Atrasadas (7+ dias)' }];
   if (who.is_admin) options.push({ id: 'reports', title: '📊 Relatórios' });
   if (who.can_approve) options.push({ id: 'requests', title: '👤 Cadastros pendentes' }, { id: 'unidentified', title: '❓ Sem identificação' });
-  options.push({ id: 'keywords', title: '🔑 Palavras-chave' }, { id: 'help', title: 'ℹ️ O que posso pedir' });
+  options.push({ id: 'keywords', title: '🔑 Palavras-chave' }, { id: 'storage', title: '🗄️ Estantes' });
+  if (who.can_approve && allows(who.level, 'intermediate')) options.push({ id: 'invites', title: '✉️ Convidar moradores' });
+  options.push({ id: 'help', title: 'ℹ️ O que posso pedir' });
   return {
-    text: `Olá, ${who.full_name.split(' ')[0]}! Portaria Prime IA · ${who.tenant_name}\nNível: ${LEVELS[who.level].title}.\nEscolha uma opção, escreva${allows(who.level, 'advanced') ? ', mande um áudio ou a foto de uma etiqueta' : ' o que precisa'}.`,
+    text: `Olá, ${who.full_name.split(' ')[0]}! Portaria Prime IA · ${who.tenant_name}\nNível: ${LEVELS[who.level].title}.\nEscolha uma opção, escreva${allows(who.level, 'advanced') ? ', mande um áudio, a foto de uma etiqueta ou a planilha de moradores' : ' o que precisa'}.`,
     options,
   };
 }
 
 export function helpText(level: Level) {
-  const lines = ['Exemplos do que você pode pedir:', '• "Liste as pendências de hoje"', '• "Quem tem encomenda no bloco 01A?"', '• "Analise a operação dos últimos 6 meses"'];
-  if (allows(level, 'intermediate')) lines.push('• "Aprova o cadastro do João do bloco 02B apto 11"', '• "Devolve a encomenda #A1B2C3: endereço errado"');
-  if (allows(level, 'advanced')) lines.push('• Mande um áudio com o pedido', '• Mande a foto da etiqueta para registrar a encomenda', '• Mande a foto da CNH para cadastrar o entregador');
-  lines.push('', 'Nada é alterado sem você tocar em ✅ Confirmar.', 'Planilhas: use o importador no painel (Unidades e moradores › Importar).');
+  const lines = ['Exemplos do que você pode pedir:', '• "Liste as pendências de hoje"', '• "Quem tem encomenda no bloco 01A?"', '• "Procura a encomenda da Ana" ou "#A1B2C3"',
+    '• "Quem mora no bloco 2 apto 11?"', '• "Analise a operação dos últimos 6 meses"'];
+  if (allows(level, 'intermediate')) {
+    lines.push('• "Aprova o cadastro do João do bloco 02B apto 11"', '• "Recusa o cadastro da Maria: não mora aqui"', '• "Devolve a encomenda #A1B2C3: endereço errado"',
+      '• "Reenvia o aviso de todas as atrasadas" (até 20 por vez)', '• "Cria a palavra AZUL para o bloco 2 apto 11, Shopee"', '• Toque numa encomenda para mover, reenviar aviso ou marcar sem identificação');
+  }
+  if (allows(level, 'advanced')) lines.push('• Mande um áudio com o pedido', '• Mande a foto da etiqueta para registrar a encomenda', '• Mande a foto da CNH para cadastrar o entregador',
+    '• Mande a planilha de moradores (.csv ou .xlsx) para o pré-cadastro');
+  lines.push('', 'Nada é alterado sem você tocar em ✅ Confirmar.');
   return lines.join('\n');
 }
 
@@ -74,6 +82,28 @@ export function listText(title: string, rows: string[], empty: string) {
 
 const fmtDate = (d: string) => (d ? d.split('-').reverse().join('/') : '');
 
+/** Resultado de lote: quantos deram certo e quais falharam (com o motivo). */
+function bulkText(title: string, r: any) {
+  const fails: any[] = Array.isArray(r?.failed) ? r.failed : [];
+  return [`${title}: ${n(r?.ok)}. ${fails.length ? '⚠️' : '✅'}`, ...fails.slice(0, 10).map((f) => `• #${f.ref}: ${f.error}`)].join('\n');
+}
+
+export function storageText(rows: any[]) {
+  if (!rows.length) return 'Nenhum local de guarda cadastrado. Cadastre em Configurações › Estantes.';
+  return ['🗄️ Estantes (livres/capacidade)', '', ...rows.map((r) => `• ${r.name}: ${n(r.free)}/${n(r.capacity)}${n(r.free) <= 0 ? ' · lotada' : ''}`)].join('\n');
+}
+
+const STATUS: Record<string, string> = { active: 'ativo', pending: 'aguardando aprovação', revoked: 'desligado' };
+export function residentsText(rows: any[]) {
+  if (!rows.length) return 'Unidade não encontrada.';
+  return rows.map((u) => [`🏠 ${u.unit}`, ...(u.residents?.length ? u.residents.map((r: any) => `• ${r.name} · ${STATUS[r.status] || r.status}`) : ['• Nenhum morador cadastrado.'])].join('\n')).join('\n\n');
+}
+
+export function packageText(p: any) {
+  return [`📦 #${p.ref} · ${p.unit || 'sem unidade'}`, `Transportadora: ${p.carrier}`, `Destinatário: ${p.recipient || '—'}`, `Rastreio: ${p.tracking || '—'}`,
+    `Local: ${p.storage || '—'}`, `Aguardando há ${p.days} dia(s)${p.rejected ? ' · 🚫 recusada pelo morador' : ''}${p.unidentified ? ' · ❓ sem identificação' : ''}`].join('\n');
+}
+
 export function doneText(action: string, result: any) {
   const map: Record<string, string> = {
     approve_resident: 'Cadastro aprovado. O morador já pode entrar no app. ✅',
@@ -83,6 +113,16 @@ export function doneText(action: string, result: any) {
     keyword_used: 'Palavra-chave marcada como utilizada. ✅',
     receive_package: `Feito! Encomenda registrada${result?.storage_code ? ` (guardar em ${result.storage_code})` : ''} e moradores notificados. ✅`,
     register_courier: 'Entregador cadastrado. ✅',
+    mark_unidentified: 'Encomenda marcada como sem identificação. O síndico destina pela lista. ✅',
+    move_package: 'Encomenda movida de local. ✅',
+    resend_notice: `Aviso reenviado aos moradores da unidade${result?.jobs ? ` (${result.jobs} envio(s))` : ''}. ✅`,
+    cancel_package: 'Encomenda encerrada e registrada no histórico. ✅',
+    keyword_create: `Palavra-chave ${result?.keyword ? `"${result.keyword}" ` : ''}cadastrada. A portaria já vê na hora do recebimento. ✅`,
+    keyword_cancel: 'Palavra-chave cancelada. ✅',
+    invite_residents: `Convites enfileirados${result?.queued != null ? `: ${result.queued}` : ''}. Saem aos poucos pelo WhatsApp dos avisos. ✅`,
+    import_residents: `Pré-cadastro salvo${result ? `: ${n(result.inserted)} novos, ${n(result.updated)} atualizados${n(result.skipped) ? `, ${n(result.skipped)} ignorados` : ''}` : ''}. Para convidar, toque em ✉️ Convidar moradores. ✅`,
+    bulk_resend: bulkText('Avisos reenviados', result),
+    bulk_return: bulkText('Devoluções registradas', result),
   };
   return map[action] || 'Feito! ✅';
 }

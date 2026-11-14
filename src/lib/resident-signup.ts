@@ -1,4 +1,6 @@
 // Cadastro do morador: validação e normalização no cliente (o servidor valida tudo de novo).
+import { normEmail, phoneE164, validEmail } from '../../api/_lib/contact-format';
+export { phoneE164, normEmail, validEmail } from '../../api/_lib/contact-format';
 
 /** Máscara de celular brasileiro enquanto digita: (11) 98888-7777. */
 export function maskPhone(v: string) {
@@ -9,15 +11,6 @@ export function maskPhone(v: string) {
 }
 
 /** Celular → E.164 (+55DD9NNNNNNNN) ou null se inválido. Mesma regra do banco (app.phone_e164). */
-export function phoneE164(v: string): string | null {
-  let d = v.replace(/\D/g, '');
-  if (d.length === 13 && d.startsWith('55')) d = d.slice(2);
-  if (d.length !== 11 || d[0] === '0' || Number(d.slice(0, 2)) < 11 || d[2] !== '9') return null;
-  return `+55${d}`;
-}
-
-export const normEmail = (v: string) => v.trim().toLowerCase();
-export const validEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(normEmail(v));
 export const fullName = (v: string) => v.trim().replace(/\s+/g, ' ');
 export const validFullName = (v: string) => /^\S{2,}(\s+\S+)+$/.test(fullName(v));
 
