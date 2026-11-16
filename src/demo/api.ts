@@ -34,9 +34,21 @@ export async function demoApi<T = any>(path: string, body: any = {}): Promise<T>
         catch (e) { store.files.delete(key); throw e; }
         return { saved: true } as T;
       }
-      return { carrier: 'Correios', trackingCode: 'DM5550001BR', recipientName: 'João Silva', senderName: 'Loja Exemplo', block: 'A', unit: '101',
-        complement: null, orderNumber: null, invoiceNumber: null, evidence: [{ field: 'recipient', text: 'João Silva' }], alerts: [], confidence: 92,
-        match: { status: 'matched', unit_id: uid(1), alerts: [] } } as T;
+      {
+        // Etiquetas fictícias variadas (escolhidas pela própria imagem): a maioria confere; algumas não identificam a
+        // unidade, para o recebimento em lote mostrar acertos e pendências como no uso real.
+        // Fora do lote (etiqueta de exemplo do recebimento normal): sempre a mesma leitura, João Silva · A 101.
+        const h = typeof body.demoVariant === 'number' ? body.demoVariant : 0;
+        const L = [
+          ['Correios', 'João Silva', 'A', '101', 1, 'matched'], ['Mercado Livre', 'Marina Costa', 'A', '102', 2, 'matched'],
+          ['Amazon', 'Rafael Lima', 'A', '201', 3, 'matched'], ['Shopee', 'Fulano Desconhecido', null, null, 0, 'not_found'],
+          ['Loggi', 'Luciana Prado', 'B', '101', 5, 'matched'], ['Correios', 'Ricardo T.', 'B', '2O2', 0, 'ambiguous'],
+        ] as const;
+        const [carrier, recipientName, block, unit, n, status] = L[h % L.length];
+        return { carrier, trackingCode: `DM${String(5550000 + (h % 9999)).padStart(7, '0')}BR`, recipientName, senderName: 'Loja Exemplo', block, unit,
+          complement: null, orderNumber: null, invoiceNumber: null, evidence: [{ field: 'recipient', text: recipientName }], alerts: [], confidence: status === 'matched' ? 92 : 48,
+          match: { status, unit_id: n ? uid(n) : null, alerts: [] } } as T;
+      }
     case '/api/receipts/download': {
       const r = store.s.receipts.find((x) => x.package_id === body.packageId);
       const p = store.pkg(body.packageId);

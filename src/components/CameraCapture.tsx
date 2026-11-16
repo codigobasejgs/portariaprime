@@ -6,7 +6,13 @@ import { Alert, Button } from './ui';
  * Captura de foto pela câmera, com alternativa de arquivo quando a permissão
  * é negada ou não há câmera. Devolve Blob JPEG (re-encodado no chamador).
  */
-export function CameraCapture({ onCapture, label = 'Fotografar' }: { onCapture: (b: Blob) => void; label?: string }) {
+export function CameraCapture({ onCapture, label = 'Fotografar', keepOpen = false, multiple = false }: {
+  onCapture: (b: Blob) => void; label?: string;
+  /** Lote: a câmera continua aberta depois de cada foto; "Concluir" fecha. */
+  keepOpen?: boolean;
+  /** Lote: "Enviar arquivo" aceita várias fotos de uma vez. */
+  multiple?: boolean;
+}) {
   const video = useRef<HTMLVideoElement>(null);
   const file = useRef<HTMLInputElement>(null);
   const [state, setState] = useState<'idle' | 'on' | 'denied'>('idle');
@@ -45,7 +51,7 @@ export function CameraCapture({ onCapture, label = 'Fotografar' }: { onCapture: 
     c.width = v.videoWidth;
     c.height = v.videoHeight;
     c.getContext('2d')!.drawImage(v, 0, 0);
-    c.toBlob((b) => { if (b) { stop(); setState('idle'); onCapture(b); } }, 'image/jpeg', 0.9);
+    c.toBlob((b) => { if (!b) return; if (!keepOpen) { stop(); setState('idle'); } onCapture(b); }, 'image/jpeg', 0.9);
   };
 
   return (
@@ -55,7 +61,7 @@ export function CameraCapture({ onCapture, label = 'Fotografar' }: { onCapture: 
           <video ref={video} playsInline muted className="w-full rounded-xl bg-black aspect-video object-cover" />
           <div className="flex gap-2">
             <Button type="button" onClick={shoot} className="flex-1"><Camera className="w-4 h-4" /> Capturar</Button>
-            <Button type="button" variant="secondary" onClick={() => { stop(); setState('idle'); }}>Cancelar</Button>
+            <Button type="button" variant="secondary" onClick={() => { stop(); setState('idle'); }}>{keepOpen ? 'Concluir' : 'Cancelar'}</Button>
           </div>
         </div>
       ) : (
@@ -65,8 +71,8 @@ export function CameraCapture({ onCapture, label = 'Fotografar' }: { onCapture: 
         </div>
       )}
       {state === 'denied' && <Alert tone="warning">Câmera indisponível ou sem permissão. Envie um arquivo ou siga sem foto.</Alert>}
-      <input ref={file} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="hidden"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) onCapture(f); e.target.value = ''; }} />
+      <input ref={file} type="file" accept="image/jpeg,image/png,image/webp" capture={multiple ? undefined : 'environment'} multiple={multiple} className="hidden"
+        onChange={(e) => { for (const f of Array.from(e.target.files || [])) onCapture(f); e.target.value = ''; }} />
     </div>
   );
 }
