@@ -50,7 +50,7 @@ await chat.getByText(/Confira antes de confirmar/).last().waitFor();
 // Sem botões: '1' solto NÃO confirma; só o código desta proposta (CONFIRMAR XXXX).
 const code = (await last().innerText()).match(/CONFIRMAR ([0-9A-F]{4})/)[1];
 await chat.getByLabel('Mensagem').fill('1');
-await chat.getByRole('button', { name: 'Enviar' }).click();
+await chat.getByRole('button', { name: 'Enviar', exact: true }).click();
 await chat.getByText(/Não entendi/).last().waitFor();
 assert.equal(await chat.getByText(/Cadastro aprovado/).count(), 0, '"1" não confirmou');
 await chat.getByRole('group', { name: 'Exemplos rápidos' }).getByRole('button', { name: 'Cadastros pendentes' }).click();
@@ -59,7 +59,7 @@ await chat.getByText(/Confira antes de confirmar/).last().waitFor();
 const code2 = (await last().innerText()).match(/CONFIRMAR ([0-9A-F]{4})/)[1];
 void code;
 await chat.getByLabel('Mensagem').fill(`confirmar ${code2}`);
-await chat.getByRole('button', { name: 'Enviar' }).click();
+await chat.getByRole('button', { name: 'Enviar', exact: true }).click();
 await chat.getByText(/Cadastro aprovado/).last().waitFor();
 
 // Foto exige nível Avançado.
