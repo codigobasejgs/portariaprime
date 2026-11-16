@@ -7,6 +7,7 @@ import { dateTime, STATUS_LABEL, unitName } from '../../../lib/format';
 import { listPackages, loadStorage, loadUnits, PackageRow, StorageLoc, UnitRow } from '../../../lib/packages';
 import { Alert, Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, toast } from '../../../components/ui';
 import { ReceiveForm } from './ReceiveForm';
+import { BatchIcon, BatchReceive } from './BatchReceive';
 import { PickupModal, type PickupStart } from './PickupFlow';
 import { ReceiptModal } from '../Receipt';
 
@@ -23,6 +24,7 @@ export function PortariaPage({ totem = false }: { totem?: boolean }) {
   const [pending, setPending] = useState<PackageRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [receive, setReceive] = useState(() => query('aba') === 'receber');
+  const [batch, setBatch] = useState(() => query('aba') === 'lote');
   const [pickup, setPickup] = useState<PickupStart | null>(() => (query('aba') === 'entregar' ? {} : null));
   const [receipt, setReceipt] = useState<string | null>(null);
   const [confirmPre, setConfirmPre] = useState<PackageRow | null>(null);
@@ -75,6 +77,10 @@ export function PortariaPage({ totem = false }: { totem?: boolean }) {
         <button type="button" onClick={() => setPickup({})} className={`${big} bg-surface border border-line`}>
           <PackageCheck className="w-6 h-6 shrink-0" aria-hidden /> Entregar ao morador
         </button>
+        <button type="button" disabled={!units || noUnits} onClick={() => setBatch(true)}
+          className={`col-span-2 ${totem ? 'min-h-16 text-lg' : 'min-h-12 text-sm'} rounded-2xl font-semibold flex items-center justify-center gap-2 border border-dashed border-line bg-surface disabled:opacity-50`}>
+          <BatchIcon className="w-5 h-5 shrink-0" aria-hidden /> Receber várias de uma vez (fotos)
+        </button>
       </div>
 
       {!totem && pre.length > 0 && (
@@ -126,6 +132,7 @@ export function PortariaPage({ totem = false }: { totem?: boolean }) {
       {view === 'aguardando' && <KeywordsCard />}
       {view === 'historico' && <HistorySearch onReceipt={setReceipt} />}
 
+      {batch && units && !noUnits && <BatchReceive units={units} storage={storage} onClose={() => setBatch(false)} onDone={refresh} />}
       {receive && units && !noUnits && <ReceiveForm units={units} storage={storage} onDone={refresh} onClose={() => setReceive(false)} />}
       {confirmPre && units && <ReceiveForm units={units} storage={storage} preregistered={confirmPre} onDone={refresh} onClose={() => setConfirmPre(null)} />}
       {pickup && <PickupModal start={pickup} waiting={waiting.filter((p) => !flags[p.id]?.rejected_at)} onClose={() => setPickup(null)} onDone={refresh} onReceipt={setReceipt} />}
