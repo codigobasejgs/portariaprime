@@ -150,6 +150,22 @@ test('unidade com cadastro nunca recebe convite; limite, escalonamento e idempot
     assert.equal(again.queued, 1);
     assert.equal((await jobs(db, A)).filter((j) => j.recipient === '+5511988880006').length, 2);
 
+    // Falha final (5 tentativas, ex.: WhatsApp desconectado): volta a pendente com o motivo e pode ser reenviado.
+    // Antes ficava "Convite na fila" para sempre e o painel não deixava reenviar (20261117000100).
+    const j4 = js.find((j) => j.recipient === '+5511988880004');
+    await db.service("update notification_jobs set attempts = 5 where id = $1", [j4.id]);
+    await db.service("select public.complete_notification_job($1, 'failed', null, 'WhatsApp do condomínio desconectado', false)", [j4.id]);
+    const davi = (await db.rpc(sind, 'resident_import_list', { p_tenant: A })).entries.find((e) => e.full_name === 'Davi Livre');
+    assert.deepEqual([davi.status, davi.last_error], ['pending', 'WhatsApp do condomínio desconectado']);
+    assert.equal((await db.service('select payload from notification_jobs where id = $1', [j4.id]))[0].payload.token, undefined, 'token sai do payload');
+    // Falha com nova tentativa agendada não mexe no pré-cadastro.
+    const j6b = (await jobs(db, A)).find((j) => j.recipient === '+5511988880006' && j.status === 'queued');
+    await db.service("select public.complete_notification_job($1, 'failed', null, 'timeout', false)", [j6b.id]);
+    assert.equal((await db.rpc(sind, 'resident_import_list', { p_tenant: A })).entries.find((e) => e.full_name === 'Fabi Livre').status, 'queued');
+    const re4 = await db.rpc(sind, 'resident_invite_send', { p_tenant: A, p_channel: 'whatsapp' });
+    assert.equal(re4.queued, 1, 'só a unidade 04 volta a ser convidada');
+    assert.equal((await jobs(db, A)).filter((j) => j.recipient === '+5511988880004').length, 2);
+
     // Reimportar a planilha: nada duplica.
     const re = await db.rpc(sind, 'resident_import_save', { p_tenant: A, p_rows: JSON.stringify(rows) });
     assert.deepEqual([re.inserted, re.updated], [0, 8]);
