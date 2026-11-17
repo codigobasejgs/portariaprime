@@ -117,6 +117,14 @@ async function run(request: Request) {
   if (je) throw new Error(je.message);
   const counts: Record<string, number> = {};
   const waClosed = new Map<string, boolean>();
+  // WhatsApp do condomínio fora do ar: o aviso espera na fila (sem gastar tentativa) e o síndico é avisado.
+  const waitWhatsApp = async (job: any) => {
+    await svc.rpc('ops_alert_whatsapp', { p_tenant: job.tenant_id });
+    const { data: d, error: de } = await svc.rpc('defer_notification_job', { p_job: job.id, p_error: 'WhatsApp do condomínio desconectado' });
+    if (de) return false;
+    counts[`${job.channel}:${d}`] = (counts[`${job.channel}:${d}`] || 0) + 1;
+    return true;
+  };
   for (const job of jobs || []) {
     let res: SendResult;
     try {
@@ -161,18 +169,19 @@ async function run(request: Request) {
         // Nunca simula envio: sem canal, o job fica "disabled" com o motivo.
         const platform = optionalEnv('PLATFORM_WHATSAPP_INSTANCE');
         if (!m.whatsapp) res = { status: 'disabled', error: 'Evento sem mensagem de WhatsApp' };
-        else res = platform ? await sendWhatsApp(platform, job.recipient, m.whatsapp)
-          : { status: 'disabled', error: 'WhatsApp não conectado neste condomínio e canal da plataforma não configurado' };
+        else if (platform) res = await sendWhatsApp(platform, job.recipient, m.whatsapp);
+        // Condomínio tem WhatsApp, só está desconectado agora: espera a reconexão em vez de descartar.
+        else if (ctx.whatsapp?.instance && !ctx.whatsapp.enabled && await waitWhatsApp(job)) continue;
+        else res = { status: 'disabled', error: 'WhatsApp não conectado neste condomínio e canal da plataforma não configurado' };
       } else if (job.channel === 'whatsapp') {
         const wa = ctx.whatsapp;
+        if (wa?.instance && !wa.enabled && await waitWhatsApp(job)) continue;
         if (!wa?.enabled || !wa.instance) res = { status: 'disabled', error: 'WhatsApp não conectado neste condomínio' };
         else {
           // Instância caída: não gasta franquia nem tentativa; o aviso espera na fila e o síndico é avisado.
           if (!waClosed.has(wa.instance)) waClosed.set(wa.instance, (await whatsAppState(wa.instance)) === 'closed');
           if (waClosed.get(wa.instance)) {
-            await svc.rpc('ops_alert_whatsapp', { p_tenant: job.tenant_id });
-            const { data: d, error: de } = await svc.rpc('defer_notification_job', { p_job: job.id, p_error: 'WhatsApp do condomínio desconectado' });
-            if (!de) { counts[`${job.channel}:${d}`] = (counts[`${job.channel}:${d}`] || 0) + 1; continue; }
+            if (await waitWhatsApp(job)) continue;
             res = { status: 'failed', error: 'WhatsApp do condomínio desconectado' };
           } else {
             const { data: allowed } = await svc.rpc('consume_whatsapp', { p_tenant: job.tenant_id });
