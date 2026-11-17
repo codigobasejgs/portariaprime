@@ -167,11 +167,13 @@ async function run(request: Request) {
         const wa = ctx.whatsapp;
         if (!wa?.enabled || !wa.instance) res = { status: 'disabled', error: 'WhatsApp não conectado neste condomínio' };
         else {
-          // Instância caída: não gasta franquia; reagenda e avisa o síndico.
+          // Instância caída: não gasta franquia nem tentativa; o aviso espera na fila e o síndico é avisado.
           if (!waClosed.has(wa.instance)) waClosed.set(wa.instance, (await whatsAppState(wa.instance)) === 'closed');
           if (waClosed.get(wa.instance)) {
-            res = { status: 'failed', error: 'WhatsApp do condomínio desconectado' };
             await svc.rpc('ops_alert_whatsapp', { p_tenant: job.tenant_id });
+            const { data: d, error: de } = await svc.rpc('defer_notification_job', { p_job: job.id, p_error: 'WhatsApp do condomínio desconectado' });
+            if (!de) { counts[`${job.channel}:${d}`] = (counts[`${job.channel}:${d}`] || 0) + 1; continue; }
+            res = { status: 'failed', error: 'WhatsApp do condomínio desconectado' };
           } else {
             const { data: allowed } = await svc.rpc('consume_whatsapp', { p_tenant: job.tenant_id });
             res = !allowed ? { status: 'disabled', error: 'Franquia de WhatsApp esgotada' }

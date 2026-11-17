@@ -59,6 +59,25 @@ test('falhas, alertas, reenvio, diagnóstico e inscrição push', async () => {
     const [j3] = await db.sql('select attempts from notification_jobs where id=$1', [job.id]);
     assert.equal(j3.attempts, 1);
 
+    // WhatsApp desconectado (20261117000300): espera na fila sem gastar tentativa; desiste só depois de 24 h.
+    const defer = async () => (await db.service("select public.defer_notification_job($1, 'WhatsApp do condomínio desconectado') r", [job.id]))[0].r;
+    await db.service("update notification_jobs set status='queued', attempts=0, next_attempt_at=now() - interval '1 minute' where id=$1", [job.id]);
+    for (let i = 0; i < 8; i++) {   // mais rodadas que as 5 tentativas
+      const c = await db.service('select id from public.claim_notification_jobs(50)');
+      assert.ok(c.some((r) => r.id === job.id), `rodada ${i}`);
+      assert.equal(await defer(), 'waiting');
+      await db.service("update notification_jobs set next_attempt_at=now() - interval '1 minute' where id=$1", [job.id]);
+    }
+    const [jw] = await db.sql('select status, attempts, waiting_since is not null w from notification_jobs where id=$1', [job.id]);
+    assert.deepEqual([jw.status, jw.attempts, jw.w], ['queued', 0, true]);
+    assert.equal(await defer(), 'ignored', 'só job em envio');
+    await db.service('select public.claim_notification_jobs(50)');
+    await db.service("update notification_jobs set waiting_since=now() - interval '25 hours' where id=$1", [job.id]);
+    assert.equal(await defer(), 'final');
+    const [jf] = await db.sql('select status, attempts from notification_jobs where id=$1', [job.id]);
+    assert.deepEqual([jf.status, jf.attempts >= 5], ['failed', true]);
+    await assert.rejects(db.as(admin, "select public.defer_notification_job($1, 'x')", [job.id]), /permission denied/);
+
     // Batimento do worker só pelo backend.
     await assert.rejects(db.rpc(admin, 'record_worker_run', { p_name: 'tick', p_result: {} }), /permission denied/);
     await db.service("select public.record_worker_run('tick', '{}'::jsonb)");
