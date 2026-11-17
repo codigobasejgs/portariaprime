@@ -110,6 +110,19 @@ async function run(request: Request) {
     report.porter_retention = re2 || de ? { error: (re2 || de)!.message } : { removed: faces.length };
   } else report.porter_retention = { removed: 0 };
 
+  // Conversas do WhatsApp no painel: anexos e mídias abertas ficam 7 dias no bucket (a conversa continua na Evolution).
+  // Lotes de 1000 até esvaziar (teto de 20 s para não atrasar os avisos abaixo).
+  report.chat_retention = { removed: 0 };
+  for (const until = Date.now() + 20_000; Date.now() < until;) {
+    const { data: chatFiles, error: ce } = await svc.rpc('whatsapp_chat_expired', { p_limit: 1000 });
+    if (ce) { report.chat_retention.error = ce.message; break; }
+    if (!chatFiles?.length) break;
+    const { error: re3 } = await svc.storage.from('tenant-chat').remove(chatFiles);
+    if (re3) { report.chat_retention.error = re3.message; break; }
+    report.chat_retention.removed += chatFiles.length;
+    if (chatFiles.length < 1000) break;
+  }
+
   report.receipts = await processReceipts(svc, base);
 
   const { data: jobs, error: je } = await svc.rpc('claim_notification_jobs', { p_limit: 50 });

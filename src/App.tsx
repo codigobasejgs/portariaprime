@@ -35,6 +35,7 @@ const Avisos = lazy(() => import('./pages/tenant/MoradorPage').then(m => ({ defa
 const Painel = lazy(() => import('./pages/tenant/PainelPage').then(m => ({ default: m.PainelPage })));
 const Relatorios = lazy(() => import('./pages/tenant/RelatoriosPage').then(m => ({ default: m.RelatoriosPage })));
 const Entregadores = lazy(() => import('./pages/tenant/EntregadoresPage').then(m => ({ default: m.EntregadoresPage })));
+const Conversas = lazy(() => import('./pages/tenant/ConversasPage').then(m => ({ default: m.ConversasPage })));
 const Pessoas = lazy(() => import('./pages/tenant/PessoasPage').then(m => ({ default: m.PessoasPage })));
 const Config = lazy(() => import('./pages/tenant/ConfigPage').then(m => ({ default: m.ConfigPage })));
 const Retorno = lazy(() => import('./pages/tenant/AssinaturaPage').then(m => ({ default: m.CheckoutReturnPage })));
@@ -167,6 +168,7 @@ function Routes() {
     if (route.area === 'relatorios' && admin) page = <Relatorios />;
     if (route.area === 'auditoria-portaria' && perm('team')) page = <PorterAudit />;
     if (route.area === 'entregadores' && admin) page = <Entregadores />;
+    if (route.area === 'conversas' && perm('settings')) page = <Conversas />;
     if (route.area === 'pessoas' && admin) page = <Pessoas tab={query('aba')} />;
     // Cada módulo valida a própria permissão (settings/team/billing).
     if (route.area === 'configuracoes' && (perm('settings') || perm('team') || perm('billing'))) page = <Config section={query('m')} />;

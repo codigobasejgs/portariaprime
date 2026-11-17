@@ -6,6 +6,8 @@ import { COURIER_HANDLERS } from './rpc-couriers';
 
 /** Local stand-in for /api/* on /demonstracao. Unlisted paths fail closed. */
 const MARK = 'DEMONSTRAÇÃO · DADOS FICTÍCIOS';
+type DemoMsg = { id: string; fromMe: boolean; at: number; text: string; media: string | null; fileName: string | null };
+const DEMO_CHATS: { jid: string; name: string; unit: string; phone: string; msgs: DemoMsg[] }[] = [];
 const fail = (m = 'Indisponível na demonstração.'): never => { throw new Error(m); };
 const bytes = async (path: unknown) => { const b = typeof path === 'string' ? store.files.get(path) : undefined; return b ? new Uint8Array(await b.arrayBuffer()) : undefined; };
 
@@ -81,6 +83,31 @@ export async function demoApi<T = any>(path: string, body: any = {}): Promise<T>
         expires_at: new Date(Date.now() + 7 * 86400_000).toISOString(), accepted_at: null, revoked_at: null });
       store.changed('invitations');
       return { manualLink: 'https://exemplo.invalid/convite-ficticio' } as T;
+    }
+    case '/api/whatsapp/chat-list':
+    case '/api/whatsapp/chat-messages':
+    case '/api/whatsapp/chat-send':
+    case '/api/whatsapp/chat-media': {
+      // Conversas fictícias do WhatsApp dos avisos; envio fica só nesta aba (nada sai do navegador).
+      if (role !== 'admin') fail('Sem permissão.');
+      const now = Date.now(), m = 60_000;
+      if (!DEMO_CHATS.length) DEMO_CHATS.push(
+        { jid: '5500000000001@s.whatsapp.net', name: 'João Silva', unit: 'A 101', phone: '+55 (00) 0000-0001', msgs: [
+          { id: 'D1', fromMe: true, at: now - 90 * m, text: 'Olá, João! Chegou uma encomenda dos Correios para A 101.', media: null, fileName: null },
+          { id: 'D2', fromMe: false, at: now - 60 * m, text: 'Obrigado! Posso retirar depois das 19h?', media: null, fileName: null }] },
+        { jid: '5500000000002@s.whatsapp.net', name: 'Marina Costa', unit: 'A 102', phone: '+55 (00) 0000-0002', msgs: [
+          { id: 'D3', fromMe: true, at: now - 300 * m, text: 'Olá, Marina! Sua encomenda do Mercado Livre foi entregue. Comprovante em anexo.', media: null, fileName: null }] });
+      const chats = DEMO_CHATS;
+      const c = path === '/api/whatsapp/chat-list' ? null : chats.find((x) => x.jid === body.jid) || fail('Conversa não encontrada neste WhatsApp.');
+      if (path === '/api/whatsapp/chat-list') {
+        return { chats: chats.map((x) => { const l = x.msgs[x.msgs.length - 1]; return { jid: x.jid, name: x.name, unit: x.unit, phone: x.phone,
+          unread: l.fromMe ? 0 : 1, at: l.at, last: { text: l.text, media: l.media, fromMe: l.fromMe } }; }).sort((a, b) => b.at - a.at) } as T;
+      }
+      if (path === '/api/whatsapp/chat-messages') return { messages: [...c!.msgs].reverse(), page: 1, pages: 1 } as T;
+      if (path === '/api/whatsapp/chat-media') fail('Arquivos não abrem na demonstração.');
+      if (!String(body.text || '').trim() && !body.file) fail('Escreva a mensagem.');
+      c!.msgs.push({ id: `D${now}`, fromMe: true, at: now, text: String(body.text || '').slice(0, 4000), media: body.file ? (String(body.mime).startsWith('video') ? 'video' : String(body.mime).startsWith('image') ? 'image' : 'document') : null, fileName: body.fileName || null });
+      return { sent: true, id: null } as T;
     }
     default:
       return fail();

@@ -5,12 +5,14 @@
  * O nome da instância é derivado no servidor (pp-<tenant>); o cliente nunca
  * informa URL, instância ou destinatário. Exige permissão "settings" e plano com WhatsApp.
  * /api/whatsapp/ia-* = WhatsApp do Portaria Prime IA (motor Whaileys): ver api/_lib/assistant-channel.ts.
+ * /api/whatsapp/chat-* = conversas do WhatsApp dos avisos no painel do síndico: ver api/_lib/whatsapp-chat.ts.
  */
 import { handler, json, readJson, isUuid, HttpError } from '../_lib/http.js';
 import { requireUser, serviceClient, rpcError } from '../_lib/supabase.js';
 import { env } from '../_lib/env.js';
 import { sendWhatsApp } from '../_lib/channels.js';
 import { assistantChannel } from '../_lib/assistant-channel.js';
+import { whatsappChat } from '../_lib/whatsapp-chat.js';
 
 function findQr(obj: any, depth = 0): string | null {
   if (!obj || depth > 4 || typeof obj !== 'object') return null;
@@ -25,12 +27,17 @@ function findQr(obj: any, depth = 0): string | null {
   return null;
 }
 
+// Envio de vídeo/PDF pelas conversas: conferência (10 s) + envio à Evolution (até 45 s).
+export const maxDuration = 60;
+
 export const POST = handler(async (request) => {
   const action = new URL(request.url).pathname.split('/').pop();
-  const { tenantId, phone } = await readJson(request, 1024);
+  const body = await readJson(request, 16 * 1024);
+  const { tenantId, phone } = body;
   if (!isUuid(tenantId)) throw new HttpError(400, 'Condomínio inválido.');
   const { client } = await requireUser(request);
   if (action?.startsWith('ia-')) return assistantChannel(client, tenantId, action.slice(3), phone);
+  if (action?.startsWith('chat-')) return whatsappChat(client, tenantId, action.slice(5), body);
 
   // Teste dirigido a um número informado pelo administrador, com texto fixo do servidor.
   if (action === 'test') {

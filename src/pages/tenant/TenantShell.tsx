@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { LifeBuoy, BarChart3, Building2, ChevronsLeft, ChevronsRight, CircleUser, HelpCircle, LayoutDashboard, LogOut, Menu, Package, Settings, Shield, Smartphone, Truck, UserCheck, Users, X } from 'lucide-react';
+import { LifeBuoy, BarChart3, Building2, ChevronsLeft, ChevronsRight, CircleUser, HelpCircle, LayoutDashboard, LogOut, Menu, MessagesSquare, Package, Settings, Shield, Smartphone, Truck, UserCheck, Users, X } from 'lucide-react';
 import { useSession } from '../../lib/session';
 import { useRealtime, useRefreshWhileVisible, useTenant } from '../../lib/tenant';
 import { supabase } from '../../lib/supabase';
 import { navigate, onLink } from '../../lib/router';
 import { publicLogoUrl } from '../../lib/theme';
+import { DEMO } from '../../demo/mode';
 import { Alert } from '../../components/ui';
 import { NotificationBell } from '../../components/NotificationBell';
 import { ShiftCountdown } from '../../components/ShiftCountdown';
@@ -27,7 +28,7 @@ function usePendingAccess(tenantId: string, enabled: boolean) {
 }
 
 const TITLES: Record<string, string> = {
-  painel: 'Visão geral', portaria: 'Encomendas', 'totem-equipe': 'Totem da portaria', pessoas: 'Unidades e moradores', relatorios: 'Relatórios', entregadores: 'Entregadores',
+  painel: 'Visão geral', portaria: 'Encomendas', 'totem-equipe': 'Totem da portaria', pessoas: 'Unidades e moradores', relatorios: 'Relatórios', entregadores: 'Entregadores', conversas: 'Conversas do WhatsApp',
   'auditoria-portaria': 'Auditoria da portaria',
   configuracoes: 'Configurações', assinatura: 'Plano e assinatura', suporte: 'Suporte', ajuda: 'Ajuda', morador: 'Minhas encomendas', avisos: 'Notificações',
   aplicativo: 'Meu aplicativo e notificações', comprovante: 'Comprovante',
@@ -109,6 +110,7 @@ export function TenantShell({ area, children }: { area: string; children: React.
     { area: 'pessoas', label: 'Unidades e moradores', icon: Users, show: t.can('approve') || admin, badge: pending },
     { area: 'relatorios', label: 'Relatórios', icon: BarChart3, show: admin },
     { area: 'entregadores', label: 'Entregadores', icon: Truck, show: admin },
+    { area: 'conversas', label: 'Conversas do WhatsApp', icon: MessagesSquare, show: t.can('settings') && (DEMO || !!t.overview?.entitlements?.feature_whatsapp) },
     { area: 'auditoria-portaria', label: 'Auditoria da portaria', icon: UserCheck, show: t.can('team') },
   ];
   const bottom: NavItem[] = [
