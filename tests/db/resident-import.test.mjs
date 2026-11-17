@@ -158,6 +158,11 @@ test('unidade com cadastro nunca recebe convite; limite, escalonamento e idempot
     const davi = (await db.rpc(sind, 'resident_import_list', { p_tenant: A })).entries.find((e) => e.full_name === 'Davi Livre');
     assert.deepEqual([davi.status, davi.last_error], ['pending', 'WhatsApp do condomínio desconectado']);
     assert.equal((await db.service('select payload from notification_jobs where id = $1', [j4.id]))[0].payload.token, undefined, 'token sai do payload');
+    // Tempo esgotado depois de entregar ao provedor (ambígua): a mensagem provavelmente chegou, o link continua valendo.
+    const j7b = (await jobs(db, A)).find((j) => j.recipient === '+5511988880007');
+    await db.service("select public.complete_notification_job($1, 'failed', null, 'ambiguous: tempo esgotado após envio', false)", [j7b.id]);
+    const [hugo] = await db.service("select status, token_hash is not null tok from resident_import_entries where full_name = 'Hugo Livre'");
+    assert.deepEqual([hugo.status, hugo.tok], ['queued', true], 'ambígua não invalida o link');
     // Falha com nova tentativa agendada não mexe no pré-cadastro.
     const j6b = (await jobs(db, A)).find((j) => j.recipient === '+5511988880006' && j.status === 'queued');
     await db.service("select public.complete_notification_job($1, 'failed', null, 'timeout', false)", [j6b.id]);
