@@ -19,7 +19,7 @@ const ORDER = ['plans', 'plan_prices', 'plan_entitlements', 'privacy_terms_globa
   'concierge_locations', 'storage_locations', 'device_enrollments', 'subscriptions', 'trial_eligibility', 'billing_orders',
   'payments', 'payment_events', 'billing_incidents', 'usage_counters', 'packages', 'package_events', 'package_attachments',
   'pickup_tokens', 'receipts', 'notifications', 'push_subscriptions', 'notification_jobs', 'notification_attempts',
-  'consent_records', 'audit_logs', 'contact_requests'];
+  'consent_records', 'audit_logs', 'contact_requests', 'module_catalog', 'domain_events'];
 
 export async function restoreInto(db, bundle) {
   // Usuários Auth: só o inventário (sem senha) — recria identidades para as FKs; acesso exige reset de senha.
@@ -31,7 +31,7 @@ export async function restoreInto(db, bundle) {
   try {
     // Tabelas semeadas por migration (catálogo e configuração comercial) são substituídas pelo backup.
     // audit_logs: migrations também auditam (ex.: desconto por ciclo); o histórico real vem do backup.
-    const seeded = ['plan_price_drafts', 'commercial_costs', 'commercial_scenarios', 'quote_policy', 'mdm_app_catalog', 'audit_logs', 'plan_entitlements', 'plan_prices', 'plans', 'profiles', 'privacy_terms_global', 'porter_terms'];
+    const seeded = ['plan_price_drafts', 'commercial_costs', 'commercial_scenarios', 'quote_policy', 'mdm_app_catalog', 'module_catalog', 'audit_logs', 'plan_entitlements', 'plan_prices', 'plans', 'profiles', 'privacy_terms_global', 'porter_terms'];
     for (const t of seeded) if (t in bundle.tables || ['plan_entitlements', 'plan_prices', 'plans', 'profiles'].includes(t)) await db.raw.exec(`delete from public.${t}`);
     const tables = [...ORDER.filter((t) => t in bundle.tables), ...Object.keys(bundle.tables).filter((t) => !ORDER.includes(t))];
     for (const t of tables) {

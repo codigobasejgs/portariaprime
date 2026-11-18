@@ -110,6 +110,11 @@ async function run(request: Request) {
     report.porter_retention = re2 || de ? { error: (re2 || de)!.message } : { removed: faces.length };
   } else report.porter_retention = { removed: 0 };
 
+  // Gateways sem contato há 2 min: offline (evento gateway.status_changed.v1). Eventos de domínio: retenção de 90 dias.
+  const { data: swept, error: gse } = await svc.rpc('gateway_sweep');
+  const { data: evRet, error: ere } = await svc.rpc('event_retention', { p_limit: 5000 });
+  report.gateways = { offline: gse ? { error: gse.message } : swept, events_deleted: ere ? { error: ere.message } : evRet };
+
   // Conversas do WhatsApp no painel: anexos e mídias abertas ficam 7 dias no bucket (a conversa continua na Evolution).
   // Lotes de 1000 até esvaziar (teto de 20 s para não atrasar os avisos abaixo).
   report.chat_retention = { removed: 0 };

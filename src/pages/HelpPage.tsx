@@ -38,7 +38,7 @@ export default function HelpPage() {
   const mine = useMemo(() => articlesFor(role), [role]);
   const found = useMemo(() => searchArticles(mine, q), [mine, q]);
   const recommended = useMemo(() => (RECOMMENDED[role] || []).map((s) => mine.find((a) => a.slug === s)).filter(Boolean).slice(0, 4) as Article[], [mine, role]);
-  const tours = toursFor(role, (p) => t.can(p as any));
+  const tours = toursFor(role, (p) => t.can(p as any), t.hasModule);
   const article = mine.find((a) => a.slug === slug);
   const open = (s: string | null) => navigate(`${base}/ajuda${s ? `?artigo=${s}` : ''}`);
   const runTour = (id: string) => { const tour = TOURS.find((x) => x.id === id); if (tour) start(tour, base, ctx!.user_id, t.tenant.id); };

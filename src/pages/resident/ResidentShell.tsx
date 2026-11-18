@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { Bell, Building2, ChevronsLeft, ChevronsRight, CircleUser, HelpCircle, History, Home } from 'lucide-react';
+import { Bell, Building2, ChevronsLeft, ChevronsRight, CircleUser, Contact, HelpCircle, History, Home } from 'lucide-react';
 import { rpc } from '../../lib/api';
 import { useTenant } from '../../lib/tenant';
 import { onLink } from '../../lib/router';
@@ -19,9 +19,9 @@ export const useResident = () => useContext(Ctx);
 
 /** Área do morador → item da navegação ativo. */
 // Detalhe da encomenda é aberto de vários lugares: nenhum destino fica marcado por engano.
-const ACTIVE: Record<string, string> = { inicio: 'inicio', historico: 'historico', comprovante: 'historico', notificacoes: 'notificacoes', conta: 'conta', ajuda: 'conta' };
+const ACTIVE: Record<string, string> = { inicio: 'inicio', historico: 'historico', comprovante: 'historico', notificacoes: 'notificacoes', conta: 'conta', ajuda: 'conta', visitantes: 'visitantes' };
 /** Artigo de ajuda contextual por área. */
-export const HELP_FOR: Record<string, string> = { inicio: 'morador-chegou', encomenda: 'morador-retirar', historico: 'morador-comprovante', notificacoes: 'morador-notificacoes', conta: 'morador-notificacoes' };
+export const HELP_FOR: Record<string, string> = { inicio: 'morador-chegou', encomenda: 'morador-retirar', historico: 'morador-comprovante', notificacoes: 'morador-notificacoes', conta: 'morador-notificacoes', visitantes: 'morador-visitantes' };
 
 export function ResidentShell({ area, children }: { area: string; children: React.ReactNode }) {
   const t = useTenant();
@@ -50,7 +50,9 @@ export function ResidentShell({ area, children }: { area: string; children: Reac
   const logo = publicLogoUrl(t.branding?.logo_path);
   const active = ACTIVE[area] || '';
   const items: [string, string, React.ElementType, number?][] = [
-    ['inicio', 'Início', Home], ['historico', 'Histórico', History], ['notificacoes', 'Notificações', Bell, unread], ['conta', 'Minha conta', CircleUser],
+    ['inicio', 'Início', Home], ['historico', 'Histórico', History],
+    ...(t.hasModule('visitors') ? [['visitantes', 'Visitas', Contact] as [string, string, React.ElementType]] : []),
+    ['notificacoes', 'Notificações', Bell, unread], ['conta', 'Minha conta', CircleUser],
   ];
   const badge = (n?: number, cls = '') => n ? <span className={`min-w-5 h-5 px-1 rounded-full bg-danger text-white text-[11px] font-semibold grid place-items-center ${cls}`} aria-hidden>{n > 99 ? '99+' : n}</span> : null;
   const label = (l: string, n?: number) => (n ? `${l}, ${n} não lidas` : l);
@@ -108,7 +110,7 @@ export function ResidentShell({ area, children }: { area: string; children: Reac
         </main>
 
         <nav aria-label="Principal" className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-surface border-t border-line pb-[env(safe-area-inset-bottom)]">
-          <div className="grid grid-cols-4">
+          <div className={`grid ${items.length > 4 ? 'grid-cols-5' : 'grid-cols-4'}`}>
             {items.map(([id, l, Icon, n]) => {
               const on = active === id;
               return (

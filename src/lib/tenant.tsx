@@ -20,6 +20,8 @@ export interface TenantState extends TenantInfo {
   reload: () => Promise<void>;
   can: (perm: 'team' | 'approve' | 'billing' | 'settings') => boolean;
   isStaff: boolean;
+  /** Módulo contratado (só para exibir menu/tela; o banco confere de novo em cada operação). */
+  hasModule: (key: string) => boolean;
 }
 
 export const TenantContext = createContext<TenantState>(null!);
@@ -28,6 +30,14 @@ export const useTenant = () => useContext(TenantContext);
 export function TenantProvider({ link, children }: { link: TenantLink; children: React.ReactNode }) {
   const [info, setInfo] = useState<Omit<TenantInfo, 'link'> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [modules, setModules] = useState<Set<string>>(() => new Set(['parcels']));
+  // Falha (banco sem a migration de módulos, rede) mantém só Encomendas: nunca quebra o que já funciona.
+  useEffect(() => {
+    let on = true;
+    rpc<{ key: string; enabled: boolean }[]>('tenant_modules', { p_tenant: link.tenant_id })
+      .then((l) => { if (on) setModules(new Set(['parcels', ...l.filter((m) => m.enabled).map((m) => m.key)])); }).catch(() => {});
+    return () => { on = false; };
+  }, [link.tenant_id]);
 
   const generation = useRef(0);
   const load = useCallback(async () => {
@@ -61,6 +71,7 @@ export function TenantProvider({ link, children }: { link: TenantLink; children:
       ...info, link, reload: load,
       can: (p) => link.role === 'admin' && link.permissions.includes(p),
       isStaff: link.role === 'admin' || link.role === 'porteiro',
+      hasModule: (k) => modules.has(k),
     }}>
       {children}
     </TenantContext.Provider>

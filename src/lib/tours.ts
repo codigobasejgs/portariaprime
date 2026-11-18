@@ -120,10 +120,28 @@ export const TOURS: Tour[] = [
       { area: 'conta', target: 'morador-avisos', title: 'Notificações', body: 'Ative os avisos neste aparelho para saber quando chegar algo.' },
     ],
   },
+  // Módulos contratados por condomínio: requires 'module:<chave>' (o shell resolve pelo contrato do condomínio).
+  {
+    id: 'visitantes-morador', title: 'Convidar visitas', roles: ['morador'], requires: 'module:visitors', article: 'morador-visitantes',
+    goal: 'Gerar o QR de uma visita e acompanhar a entrada.',
+    steps: [
+      { area: 'visitantes', target: 'visitantes-acoes', title: 'Novo convite', body: 'Informe o nome e até quando vale. O QR é de uso único e só aparece uma vez.' },
+      { area: 'visitantes', target: 'visitantes-convites', title: 'Seus convites', body: 'Acompanhe se o convite foi usado ou cancele quando a visita não vier.' },
+    ],
+  },
+  {
+    id: 'visitantes-portaria', title: 'Visitantes na portaria', roles: ['admin', 'porteiro'], requires: 'module:visitors', article: 'portaria-visitantes',
+    goal: 'Registrar entradas por convite ou com autorização.',
+    steps: [
+      { area: 'visitantes', target: 'visitantes-acoes', title: 'Entrada', body: 'Leia o QR do convite ou registre a entrada sem convite informando quem autorizou. Isso não abre portão.' },
+      { area: 'visitantes', target: 'visitantes-dentro', title: 'No condomínio agora', body: 'Registre a saída quando a visita for embora.' },
+    ],
+  },
 ];
 
-export function toursFor(role: Role, can: (p: string) => boolean): Tour[] {
-  return TOURS.filter((t) => t.roles.includes(role) && (!t.requires || can(t.requires)));
+export function toursFor(role: Role, can: (p: string) => boolean, hasModule: (k: string) => boolean = () => false): Tour[] {
+  const ok = (r: string) => (r.startsWith('module:') ? hasModule(r.slice(7)) : can(r));
+  return TOURS.filter((t) => t.roles.includes(role) && (!t.requires || ok(t.requires)));
 }
 
 const key = (user: string, tenant: string) => `pp_tours:v${TOUR_VERSION}:${user}:${tenant}`;

@@ -36,6 +36,8 @@ const Painel = lazy(() => import('./pages/tenant/PainelPage').then(m => ({ defau
 const Relatorios = lazy(() => import('./pages/tenant/RelatoriosPage').then(m => ({ default: m.RelatoriosPage })));
 const Entregadores = lazy(() => import('./pages/tenant/EntregadoresPage').then(m => ({ default: m.EntregadoresPage })));
 const Conversas = lazy(() => import('./pages/tenant/ConversasPage').then(m => ({ default: m.ConversasPage })));
+const Visitantes = lazy(() => import('./pages/tenant/VisitantesPage').then(m => ({ default: m.VisitantesPage })));
+const Central = lazy(() => import('./pages/tenant/CentralPage').then(m => ({ default: m.CentralPage })));
 const Pessoas = lazy(() => import('./pages/tenant/PessoasPage').then(m => ({ default: m.PessoasPage })));
 const Config = lazy(() => import('./pages/tenant/ConfigPage').then(m => ({ default: m.ConfigPage })));
 const Retorno = lazy(() => import('./pages/tenant/AssinaturaPage').then(m => ({ default: m.CheckoutReturnPage })));
@@ -60,7 +62,7 @@ const PorterSignup = lazy(() => import('./pages/PorterSignupPage').then(m => ({ 
 const PorterLogin = lazy(() => import('./pages/PorterLoginPage').then(m => ({ default: m.PorterLoginPage })));
 const PorterAudit = lazy(() => import('./pages/tenant/PorterAuditPage').then(m => ({ default: m.PorterAuditPage })));
 
-const RESIDENT_AREAS = new Set(['inicio', 'historico', 'notificacoes', 'conta', 'encomenda', 'comprovante', 'morador', 'avisos']);
+const RESIDENT_AREAS = new Set(['inicio', 'historico', 'notificacoes', 'conta', 'encomenda', 'comprovante', 'morador', 'avisos', 'visitantes']);
 
 function Redirect({ to }: { to: string }) {
   useEffect(() => { navigate(to, true); }, [to]);
@@ -152,7 +154,7 @@ function Routes() {
       if (old[route.area]) return <Redirect to={`/c/${route.slug}/${old[route.area]}`} />;
       const pages: Record<string, React.ReactNode> = {
         inicio: <RInicio />, historico: <RHistorico />, notificacoes: <RNotificacoes />, conta: <RConta />,
-        encomenda: <REncomenda />, comprovante: <RComprovante />, ajuda: <Ajuda />,
+        encomenda: <REncomenda />, comprovante: <RComprovante />, ajuda: <Ajuda />, visitantes: <Visitantes />,
       };
       const rpage = pages[route.area] || <Alert tone="warning">Esta área não faz parte do app do morador. <a className="underline" href={`/c/${route.slug}/inicio`} onClick={onLink}>Ir para o início</a></Alert>;
       return <TenantProvider key={link.tenant_id} link={link}><TourProvider><Suspense fallback={<Spinner />}><ResidentShell area={route.area}><Suspense fallback={<Spinner />}>{rpage}</Suspense></ResidentShell></Suspense></TourProvider></TenantProvider>;
@@ -169,6 +171,9 @@ function Routes() {
     if (route.area === 'auditoria-portaria' && perm('team')) page = <PorterAudit />;
     if (route.area === 'entregadores' && admin) page = <Entregadores />;
     if (route.area === 'conversas' && perm('settings')) page = <Conversas />;
+    // Módulos novos: a tela confere o contrato e o banco confere de novo em cada operação.
+    if (route.area === 'visitantes' && staff) page = <Visitantes />;
+    if (route.area === 'central' && staff) page = <Central />;
     if (route.area === 'pessoas' && admin) page = <Pessoas tab={query('aba')} />;
     // Cada módulo valida a própria permissão (settings/team/billing).
     if (route.area === 'configuracoes' && (perm('settings') || perm('team') || perm('billing'))) page = <Config section={query('m')} />;

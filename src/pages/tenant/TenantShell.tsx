@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { LifeBuoy, BarChart3, Building2, ChevronsLeft, ChevronsRight, CircleUser, HelpCircle, LayoutDashboard, LogOut, Menu, MessagesSquare, Package, Settings, Shield, Smartphone, Truck, UserCheck, Users, X } from 'lucide-react';
+import { LifeBuoy, BarChart3, Building2, ChevronsLeft, ChevronsRight, CircleUser, HelpCircle, LayoutDashboard, LogOut, Menu, MessagesSquare, Package, Radar, Contact, Settings, Shield, Smartphone, Truck, UserCheck, Users, X } from 'lucide-react';
 import { useSession } from '../../lib/session';
 import { useRealtime, useRefreshWhileVisible, useTenant } from '../../lib/tenant';
 import { supabase } from '../../lib/supabase';
@@ -28,7 +28,7 @@ function usePendingAccess(tenantId: string, enabled: boolean) {
 }
 
 const TITLES: Record<string, string> = {
-  painel: 'Visão geral', portaria: 'Encomendas', 'totem-equipe': 'Totem da portaria', pessoas: 'Unidades e moradores', relatorios: 'Relatórios', entregadores: 'Entregadores', conversas: 'Conversas do WhatsApp',
+  painel: 'Visão geral', portaria: 'Encomendas', 'totem-equipe': 'Totem da portaria', pessoas: 'Unidades e moradores', relatorios: 'Relatórios', entregadores: 'Entregadores', conversas: 'Conversas do WhatsApp', visitantes: 'Visitantes', central: 'Central da portaria',
   'auditoria-portaria': 'Auditoria da portaria',
   configuracoes: 'Configurações', assinatura: 'Plano e assinatura', suporte: 'Suporte', ajuda: 'Ajuda', morador: 'Minhas encomendas', avisos: 'Notificações',
   aplicativo: 'Meu aplicativo e notificações', comprovante: 'Comprovante',
@@ -41,7 +41,7 @@ function ScreenHelp({ area, base }: { area: string; base: string }) {
   const { start, running } = useTour();
   const role = t.link.role;
   const article = articleFor(area, role);
-  const tour = toursFor(role, (p) => t.can(p as any)).find((x) => x.steps[0].area === area);
+  const tour = toursFor(role, (p) => t.can(p as any), t.hasModule).find((x) => x.steps[0].area === area);
   const [progress, setProgress] = useState(() => loadProgress(ctx!.user_id, t.tenant.id));
   if (area === 'ajuda' || !article) return null;
   const offer = tour && progress[tour.id] === undefined && !running;
@@ -106,7 +106,9 @@ export function TenantShell({ area, children }: { area: string; children: React.
   const pending = usePendingAccess(t.tenant.id, t.can('approve'));
   const items: NavItem[] = [
     { area: 'painel', label: 'Visão geral', icon: LayoutDashboard, show: admin },
+    { area: 'central', label: 'Central da portaria', icon: Radar, show: t.isStaff && t.hasModule('concierge') },
     { area: 'portaria', label: 'Encomendas', icon: Package, show: t.isStaff, match: ['portaria', 'totem-equipe'] },
+    { area: 'visitantes', label: 'Visitantes', icon: Contact, show: t.isStaff && t.hasModule('visitors') },
     { area: 'pessoas', label: 'Unidades e moradores', icon: Users, show: t.can('approve') || admin, badge: pending },
     { area: 'relatorios', label: 'Relatórios', icon: BarChart3, show: admin },
     { area: 'entregadores', label: 'Entregadores', icon: Truck, show: admin },

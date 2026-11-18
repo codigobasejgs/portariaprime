@@ -3,6 +3,7 @@ import { friendly, rpc } from '../../lib/api';
 import { dateTime } from '../../lib/format';
 import { Alert, Badge, Button, Modal, Spinner } from '../../components/ui';
 import { PlatformContext, Row, rowActions } from './platform-model';
+import { TenantModules } from './TenantModules';
 
 export default function TenantDetailModal({ tenantId, context, onClose, onAction }: { tenantId: string; context: PlatformContext; onClose: () => void; onAction: (name: string, row: Row) => void }) {
   const [data, setData] = useState<{ tenant: Row; subscription: Row; counts: Row; courtesies: Row[] } | null>(null);
@@ -42,6 +43,7 @@ export default function TenantDetailModal({ tenantId, context, onClose, onAction
           <div className="flex justify-between items-center"><h3 className="font-semibold text-sm">Cortesias temporárias de acesso</h3>{context.capabilities.includes('courtesy_grant') && <Button variant="secondary" onClick={() => onAction('courtesy_grant', { id: data.tenant.id, name: data.tenant.name })}>Conceder cortesia</Button>}</div>
           {data.courtesies?.length ? <ul className="divide-y divide-line text-sm">{data.courtesies.map(item => <li key={item.id} className="py-2 flex flex-wrap justify-between items-center gap-2"><div><p>{dateTime(item.starts_at)} até {dateTime(item.ends_at)}</p>{item.revoked_at ? <Badge tone="neutral">Revogada em {dateTime(item.revoked_at)}</Badge> : <Badge tone="success">Vigente</Badge>}</div>{!item.revoked_at && context.capabilities.includes('courtesy_revoke') && <Button variant="ghost" onClick={() => onAction('courtesy_revoke', { id: item.id, name: `Cortesia do condomínio ${data.tenant.name}` })}>Revogar</Button>}</li>)}</ul> : <p className="text-xs text-muted">Nenhuma cortesia registrada para este condomínio.</p>}
         </div>
+        <TenantModules tenantId={data.tenant.id} canManage={context.capabilities.includes('modules_manage')} />
         <div className="flex flex-wrap gap-2 border-t border-line pt-3">
           {context.capabilities.includes('plans') && <Button variant="secondary" onClick={() => onAction('plan_change', { id: data.tenant.id, name: data.tenant.name, plan_code: data.subscription?.plan_code })}>Trocar plano</Button>}
           {rowActions('tenants', data.tenant, context).map(name => <Button key={name} variant="secondary" onClick={() => onAction(name, data.tenant)}>{name === 'tenant_status' ? 'Alterar situação do condomínio' : name}</Button>)}

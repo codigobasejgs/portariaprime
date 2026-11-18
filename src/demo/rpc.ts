@@ -6,6 +6,7 @@ import { PORTARIA_HANDLERS } from './rpc-portaria';
 import { COURIER_HANDLERS } from './rpc-couriers';
 import { IMPORT_HANDLERS } from './rpc-import';
 import { ASSISTANT_HANDLERS } from './rpc-assistant';
+import { MODULE_HANDLERS } from './rpc-modules';
 
 /** Same RPC names and parameter names the pages send to Supabase; data from the local store. */
 export type Handler = (a: Record<string, any>) => any;
@@ -234,4 +235,4 @@ const CORE: Record<string, Handler> = {
   },
 };
 
-export const HANDLERS: Record<string, Handler> = { ...CORE, ...ADMIN_HANDLERS, ...DASH_HANDLERS, ...PORTARIA_HANDLERS, ...COURIER_HANDLERS, ...IMPORT_HANDLERS, ...ASSISTANT_HANDLERS };
+export const HANDLERS: Record<string, Handler> = { ...CORE, ...ADMIN_HANDLERS, ...DASH_HANDLERS, ...PORTARIA_HANDLERS, ...COURIER_HANDLERS, ...IMPORT_HANDLERS, ...ASSISTANT_HANDLERS, ...MODULE_HANDLERS };
