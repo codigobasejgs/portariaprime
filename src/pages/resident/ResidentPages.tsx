@@ -8,6 +8,7 @@ import { Alert, Button, Field, Input, Modal, Select, Spinner } from '../../compo
 import { PackagePhotos } from '../../components/PhotoGallery';
 import { Notif, useNotifications } from '../../components/NotificationBell';
 import { useResident } from './ResidentShell';
+import { InstallApp } from '../../components/InstallApp';
 import { ExceptionNote, HistoryItem, KeywordCard, pkgTitle, QrSheet, ReceiptActions, RejectButton, RejectedNote, ResidentPackage, StatusBadge, WAITING, WaitingCard } from './parts';
 
 interface Home {
@@ -22,6 +23,19 @@ const greeting = (tz: string) => {
 };
 
 /** Início: o que chegou e como retirar. Falha de consulta nunca vira "nada aguardando". */
+/** Início do morador recém-aprovado: convite para instalar o app. Some instalado; "Agora não" guarda neste aparelho. */
+function InstallNudge({ tenantId, name }: { tenantId: string; name: string }) {
+  const key = `pp_install_nudge:${tenantId}`;
+  const [hidden, setHidden] = useState(() => { try { return localStorage.getItem(key) === '1'; } catch { return false; } });
+  if (hidden) return null;
+  return (
+    <div className="space-y-1">
+      <InstallApp compact title="Acompanhe pelo app" intro={<>Instale o aplicativo do {name}: abre direto da tela inicial e avisa quando chegar encomenda.</>} />
+      <button type="button" className="text-xs text-muted underline min-h-9 px-1" onClick={() => { setHidden(true); try { localStorage.setItem(key, '1'); } catch { /* ok */ } }}>Agora não</button>
+    </div>
+  );
+}
+
 export function InicioPage() {
   const t = useTenant();
   const r = useResident();
@@ -71,6 +85,8 @@ export function InicioPage() {
           <BellRing className="w-5 h-5 shrink-0" aria-hidden /><span className="flex-1">Quer ser avisado quando chegar algo? Configure as notificações.</span><ChevronRight className="w-4 h-4" aria-hidden />
         </a>
       )}
+
+      <InstallNudge tenantId={t.tenant.id} name={t.branding?.display_name || t.tenant.name} />
 
       <KeywordCard units={r.units} unit={r.unit} />
 

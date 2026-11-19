@@ -6,6 +6,7 @@ import { rpc } from '../../../lib/api';
 import { dateTime, STATUS_LABEL, unitName } from '../../../lib/format';
 import { listPackages, loadStorage, loadUnits, PackageRow, StorageLoc, UnitRow } from '../../../lib/packages';
 import { Alert, Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, toast } from '../../../components/ui';
+import { CarrierLogo } from '../../../components/CarrierLogo';
 import { ReceiveForm } from './ReceiveForm';
 import { BatchIcon, BatchReceive } from './BatchReceive';
 import { PickupModal, type PickupStart } from './PickupFlow';
@@ -112,12 +113,12 @@ export function PortariaPage({ totem = false }: { totem?: boolean }) {
             <ul className="divide-y divide-line">
               {filtered.map((p) => { const f = flags[p.id]; return (
                 <li key={p.id} className={`py-3 flex items-center justify-between gap-2 ${f?.rejected_at ? 'border-l-4 border-danger bg-danger-bg pl-3 -ml-1 rounded-r-lg' : ''}`}>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex items-start gap-3"><CarrierLogo name={p.carrier} /><div className="min-w-0">
                     <p className="font-medium">{unitName(p.unit_block, p.unit_label, t.unitLabels)} <span className="text-muted font-normal">· {p.carrier}</span>
                       {f?.unidentified_reason && <> <Badge tone="warning">Morador não identificado</Badge></>}</p>
                     {f?.rejected_at && <p className="text-sm font-semibold text-danger">🚫 Recusada pelo morador: {REJECTION_TEXT[f.rejection_reason || 'other']}{f.rejection_note ? ` — ${f.rejection_note}` : ''}.</p>}
                     <p className="text-xs text-muted break-words">{[p.recipient_name, p.tracking_code || 'sem rastreio', dateTime(p.received_at, t.tenant.timezone), p.storage_code].filter(Boolean).join(' · ')}</p>
-                  </div>
+                  </div></div>
                   <div className="flex shrink-0 gap-1">
                     {f?.rejected_at ? <Button variant="danger" onClick={() => setResolve(p)}><Undo2 className="w-4 h-4" /> Devolver</Button>
                       : <Button variant="secondary" onClick={() => setPickup({ pkg: p })}>Entregar</Button>}

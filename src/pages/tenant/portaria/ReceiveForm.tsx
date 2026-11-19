@@ -14,6 +14,7 @@ import { Alert, Badge, Button, Chips, Field, Input, Modal, Select, toast } from 
 import { GalleryPhoto, PhotoGallery, preparePhoto, uploadGallery } from '../../../components/PhotoGallery';
 import { DemoLabelSample } from '../../../demo/samples';
 import { CourierPicker } from './CourierPicker';
+import { CarrierChoice, CarrierLogo } from '../../../components/CarrierLogo';
 
 interface Match {
   status: 'matched' | 'unit_only' | 'conflict' | 'ambiguous' | 'name_only' | 'not_found'; unit_id: string | null; alerts: string[];
@@ -254,13 +255,14 @@ export function ReceiveForm({ units, storage, onDone, onClose, preregistered }: 
         <div className="space-y-4">
           <CourierPicker value={courier} onChange={setCourier} courierId={courierId} onSelect={setCourierId} carrier={carrier} onCarrier={setCarrier} ocrEnabled={ocrEnabled}
             recent={courierOptions} onRecent={(name) => { const previous = recent.find((p) => p.courier_name === name); if (previous) setCarrier(previous.carrier); }} />
-          <Field label="Transportadora">{customCarrier
-            ? <Input value={carrier} onChange={(e) => setCarrier(e.target.value)} list="carriers-recentes" maxLength={40} autoComplete="off" />
-            : <Select value={carrier} onChange={(e) => setCarrier(e.target.value)}>{suggestions([carrier], [], carrierOptions, 40).map((c) => <option key={c}>{c}</option>)}</Select>}
-          </Field>
-          <datalist id="carriers-recentes">{carrierOptions.map((c) => <option key={c} value={c} />)}</datalist>
-          <Chips label="Transportadoras frequentes" options={carrierOptions.slice(0, 5)} selected={[carrier]} onPick={setCarrier} />
-          <Button type="button" variant="ghost" onClick={() => setCustomCarrier((v) => !v)}>{customCarrier ? 'Escolher da lista' : 'Digitar outra transportadora'}</Button>
+          <div className="space-y-2">
+            <p className="flex items-center gap-2 text-sm font-medium">Transportadora: <CarrierLogo name={carrier} size="sm" /><span className="font-semibold">{carrier || '—'}</span></p>
+            {customCarrier
+              ? <Field label="Transportadora"><Input value={carrier} onChange={(e) => setCarrier(e.target.value)} list="carriers-recentes" maxLength={40} autoComplete="off" /></Field>
+              : <CarrierChoice value={carrier} onChange={setCarrier} frequent={carrierOptions.slice(0, 6)} />}
+            <datalist id="carriers-recentes">{carrierOptions.map((c) => <option key={c} value={c} />)}</datalist>
+            <Button type="button" variant="ghost" onClick={() => setCustomCarrier((v) => !v)}>{customCarrier ? 'Escolher da lista' : 'Digitar outra transportadora'}</Button>
+          </div>
           <Field label="Recebido por (porteiro, obrigatório)" hint="Preenchido com quem está logado. Altere se o terminal for compartilhado.">
             <Input value={receiver} onChange={(e) => { receiverEdited.current = true; setReceiver(e.target.value); }} required minLength={2} maxLength={120} autoComplete="name" />
           </Field>

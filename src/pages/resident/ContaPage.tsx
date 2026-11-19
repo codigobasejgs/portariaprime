@@ -6,7 +6,7 @@ import { useSession } from '../../lib/session';
 import { useTenant } from '../../lib/tenant';
 import { navigate, onLink } from '../../lib/router';
 import { dateOnly, unitName } from '../../lib/format';
-import { usePwaInstall } from '../../hooks/usePwaInstall';
+import { InstallApp } from '../../components/InstallApp';
 import { usePushDevice } from '../../components/PushToggle';
 import { Alert, Button, Field, Input, Modal, Spinner, useAction } from '../../components/ui';
 import { useResident } from './ResidentShell';
@@ -244,17 +244,9 @@ function DeviceNotifications() {
 }
 
 function InstallSection() {
-  const { isInstalled, isInstallable, promptInstall } = usePwaInstall();
-  const ua = navigator.userAgent;
-  const ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  const inApp = /Instagram|FBAN|FBAV|Line\/|WhatsApp/i.test(ua);
   return (
     <Section id="instalar" icon={Smartphone} title="Instalar aplicativo">
-      {isInstalled ? <p className="text-sm text-success">Você está usando o aplicativo instalado.</p>
-        : inApp ? <Alert tone="warning">Você abriu por dentro de outro aplicativo. Abra este endereço no Chrome (Android) ou no Safari (iPhone) para instalar.</Alert>
-        : isInstallable ? <div className="space-y-2"><p className="text-sm">Instale para abrir direto da tela inicial, com a marca do condomínio.</p><Button onClick={() => promptInstall()}>Instalar aplicativo</Button></div>
-        : ios ? <ol className="text-sm list-decimal pl-5 space-y-1"><li>Abra no Safari.</li><li>Toque em Compartilhar (quadrado com seta).</li><li>Escolha “Adicionar à Tela de Início”.</li></ol>
-        : <p className="text-sm">No menu do navegador (⋮), procure “Instalar app” ou “Adicionar à tela inicial”. Se não aparecer, o app pode já estar instalado neste aparelho.</p>}
+      <InstallApp title="Aplicativo do condomínio" intro="Instale para abrir direto da tela inicial, com a marca do condomínio." />
     </Section>
   );
 }

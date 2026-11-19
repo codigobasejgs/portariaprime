@@ -6,6 +6,15 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
+// O Chrome dispara beforeinstallprompt UMA vez, cedo — muitas vezes antes da tela que tem o botão montar (lazy
+// load). Guardamos o evento no carregamento do módulo para quem montar depois.
+let early: BeforeInstallPromptEvent | null = null;
+let installedEarly = false;
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); early = e as BeforeInstallPromptEvent; });
+  window.addEventListener('appinstalled', () => { installedEarly = true; early = null; });
+}
+
 function detectStandalone(): boolean {
   if (typeof window === 'undefined') return false;
   const iosStandalone = (window.navigator as unknown as { standalone?: boolean }).standalone;
@@ -18,8 +27,8 @@ function detectStandalone(): boolean {
  * there, so callers should fall back to "Compartilhar > Adicionar à Tela de Início".
  */
 export function usePwaInstall() {
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [isInstalled, setIsInstalled] = useState<boolean>(() => detectStandalone());
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(() => early);
+  const [isInstalled, setIsInstalled] = useState<boolean>(() => installedEarly || detectStandalone());
 
   useEffect(() => {
     const onBeforeInstallPrompt = (e: Event) => {
@@ -49,6 +58,7 @@ export function usePwaInstall() {
     await deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
     setDeferredPrompt(null);
+    early = null;   // o evento só pode ser usado uma vez
     return outcome;
   }, [deferredPrompt]);
 

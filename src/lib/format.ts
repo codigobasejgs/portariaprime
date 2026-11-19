@@ -1,4 +1,6 @@
-export const brl = (cents: number) => (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+import { CARRIER_LIST } from './carriers';
+
+export const brl =(cents: number) => (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 export const dateTime = (iso: string | null | undefined, tz?: string) =>
   iso ? new Date(iso).toLocaleString('pt-BR', { timeZone: tz, dateStyle: 'short', timeStyle: 'short' }) : '—';
@@ -37,7 +39,7 @@ export function unitName(block?: string | null, label?: string | null, labels: U
   return [prefix(block, group), prefix(label, number, number.toLowerCase() === 'apartamento')].filter(Boolean).join(' · ') || '—';
 }
 
-export const CARRIERS = ['Correios', 'Mercado Livre', 'Amazon', 'Shopee', 'Loggi', 'Outra'];
+export const CARRIERS = [...CARRIER_LIST.map((c) => c.name), 'Outra'];
 
 /** CSV seguro: escapa aspas e neutraliza fórmulas (=, +, -, @, tab, CR). */
 export function toCsv(rows: Record<string, unknown>[], cols: [string, string][]) {

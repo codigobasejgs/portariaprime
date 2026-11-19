@@ -6,7 +6,7 @@ import { navigate, onLink } from '../lib/router';
 import { useSession } from '../lib/session';
 import { applyTheme, publicLogoUrl } from '../lib/theme';
 import { Alert, Button, Field, Input, Select, Spinner } from '../components/ui';
-import { usePwaInstall } from '../hooks/usePwaInstall';
+import { InstallApp } from '../components/InstallApp';
 import { DEFAULT_UNIT_LABELS } from '../lib/format';
 import { BLOCK_PARAM, RELATIONS, blocksOf, Errors, fullName, maskPhone, normEmail, OTHER, phoneE164, SignupForm, UnitOpt, unitsOf, unitValue, validate } from '../lib/resident-signup';
 
@@ -95,7 +95,6 @@ const InviteNote = ({ inv }: { inv: Invite | null }) => (inv ? <Alert tone="info
 export function PortalPage({ slug }: { slug: string }) {
   const { portal, error } = usePortal(slug);
   const { session, ctx, signOut } = useSession();
-  const { isInstalled, isInstallable, promptInstall } = usePwaInstall();
   const inv = useInvite(slug);
   if (portal === undefined) return <Spinner />;
   if (!portal || portal.status !== 'active') return <PortalNotFound error={error || (portal ? 'Este portal está temporariamente indisponível.' : null)} />;
@@ -107,8 +106,6 @@ export function PortalPage({ slug }: { slug: string }) {
   const bloco = new URLSearchParams(location.search).get('bloco');
   const blocoQ = bloco && BLOCK_PARAM.test(bloco) ? `&bloco=${encodeURIComponent(bloco)}` : '';
   const signup = () => navigate(session ? `${here}/solicitar` : `/cadastro?next=${next}&portal=${slug}${blocoQ}`);
-  const ua = typeof navigator === 'undefined' ? '' : navigator.userAgent;
-  const ios = /iPhone|iPad|iPod/.test(ua);
   return (
     <PortalShell portal={portal}>
       <section aria-labelledby="portal-boas-vindas" className="space-y-2">
@@ -136,16 +133,7 @@ export function PortalPage({ slug }: { slug: string }) {
         ))}
       </ul>
 
-      {!isInstalled && (
-        <section aria-labelledby="portal-instalar" className="mt-8 rounded-2xl bg-surface-2 p-5 space-y-2">
-          <h3 id="portal-instalar" className="font-semibold">Instale na tela inicial</h3>
-          {isInstallable
-            ? <><p className="text-sm text-muted">Abra o portal como um aplicativo, direto da tela inicial do celular.</p><Button variant="secondary" onClick={() => promptInstall()}>Instalar aplicativo</Button></>
-            : <p className="text-sm text-muted">{ios
-              ? 'No iPhone ou iPad: toque em Compartilhar e depois em “Adicionar à Tela de Início”.'
-              : 'No Android: abra o menu do navegador (⋮) e escolha “Instalar app” ou “Adicionar à tela inicial”.'}</p>}
-        </section>
-      )}
+      <div className="mt-8"><InstallApp title="Instale na tela inicial" intro="Abra o portal como um aplicativo, direto da tela inicial do celular." compact /></div>
 
       <p className="mt-8 text-xs text-muted">Seus dados são usados para identificar você, validar o cadastro e controlar encomendas e correspondências. <a href="/privacidade" onClick={onLink} className="underline">Política de privacidade</a>.
         {' '}Equipe da portaria ou administração? <a href="/entrar" onClick={onLink} className="underline">Acesse pelo login</a>.</p>
@@ -317,6 +305,7 @@ export function ResidentSignupPage({ slug }: { slug: string }) {
       <h2 className="text-2xl font-semibold">Cadastro recebido com sucesso!</h2>
       <Alert tone="success">Falta só confirmar seu e-mail: enviamos um link para <strong>{sent}</strong>. Depois de confirmar, seu cadastro segue para a administração do {portal.name} — sem preencher nada de novo.</Alert>
       <p className="text-sm text-muted">Não chegou? Verifique o spam ou aguarde alguns minutos.</p>
+      <InstallApp title="Acompanhe pelo app" intro={<>Instale o aplicativo do {portal.name} agora: depois de confirmar o e-mail, é só abrir pelo ícone para acompanhar o cadastro e as encomendas.</>} />
     </div></PortalShell>
   );
   return (
@@ -382,6 +371,7 @@ export function RequestAccessPage({ slug }: { slug: string }) {
         {req.privacy_version && <><dt className="text-muted">Termo de dados</dt><dd>versão {req.privacy_version} aceita</dd></>}
       </dl>
       <p className="text-sm text-muted">Enquanto isso, nenhuma informação do condomínio é exibida. Demorou? Fale com a portaria ou a administração.</p>
+      <InstallApp title="Acompanhe pelo app" intro={<>Instale o aplicativo do {portal.name} no celular: você acompanha a aprovação do cadastro e, depois, recebe aviso quando chegar encomenda.</>} />
       <div className="grid sm:grid-cols-2 gap-3">
         <Button onClick={load} loading={checking}>Acompanhar minha solicitação</Button>
         <Button variant="secondary" onClick={() => navigate(`/c/${slug}`)}>Voltar ao portal</Button>

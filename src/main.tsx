@@ -1,5 +1,6 @@
 import './demo/guard';
 import './lib/polyfills';
+import './hooks/usePwaInstall';   // captura o beforeinstallprompt antes das telas (lazy) montarem
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import {PwaUpdate} from './components/PwaUpdate';

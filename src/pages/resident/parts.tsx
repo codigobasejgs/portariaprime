@@ -6,6 +6,7 @@ import { onLink } from '../../lib/router';
 import { dateTime, unitName } from '../../lib/format';
 import { Alert, Badge, Button, Modal } from '../../components/ui';
 import { QRCodeDisplay } from '../../components/VisualCodes';
+import { CarrierLogo } from '../../components/CarrierLogo';
 
 export interface ResidentPackage {
   id: string; ref: string; status: string; carrier: string; tracking_code: string | null; recipient_name: string | null;
@@ -170,10 +171,10 @@ export function WaitingCard({ p, multiUnit, onQr, onChange }: { p: ResidentPacka
   return (
     <li className={`rounded-2xl border bg-surface p-4 space-y-3 ${p.rejected_at ? 'border-danger' : 'border-line'}`}>
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+        <div className="min-w-0 flex items-center gap-3"><CarrierLogo name={p.carrier} size="lg" /><div className="min-w-0">
           <p className="font-semibold">{p.carrier} <span className="text-muted font-normal">#{p.ref}</span></p>
           {p.tracking_code && <p className="text-xs text-muted break-all">Rastreio {p.tracking_code}</p>}
-        </div>
+        </div></div>
         <StatusBadge status={p.status} />
       </div>
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
@@ -198,6 +199,7 @@ export function HistoryItem({ p }: { p: ResidentPackage }) {
   return (
     <li>
       <a href={`/c/${t.tenant.slug}/encomenda?p=${p.id}`} onClick={onLink} className="flex items-start gap-3 rounded-2xl border border-line bg-surface p-4 hover:bg-surface-2">
+        <CarrierLogo name={p.carrier} />
         <span className="min-w-0 flex-1 space-y-1">
           <span className="flex flex-wrap items-center justify-between gap-2"><span className="font-semibold">{p.carrier} <span className="text-muted font-normal">#{p.ref}</span></span><StatusBadge status={p.status} /></span>
           <span className="block text-sm text-muted">Chegou em {dateTime(p.received_at, t.tenant.timezone)}</span>
