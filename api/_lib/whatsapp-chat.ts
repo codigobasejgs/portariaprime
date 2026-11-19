@@ -11,6 +11,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { env } from './env.js';
 import { HttpError, json } from './http.js';
 import { rpcError, serviceClient } from './supabase.js';
+import { whatsAppState } from './channels.js';
 
 const OPS = ['list', 'messages', 'send', 'media'];
 const JID = /^[\w.-]{5,40}@(s\.whatsapp\.net|lid)$/;
@@ -67,6 +68,8 @@ export async function whatsappChat(client: SupabaseClient, tenantId: string, op:
   await gate('read');
   // Envio: só para conversa que já existe neste WhatsApp; confere antes de gastar franquia (o gate consome e audita).
   if (op === 'send') {
+    // Desconectado: a Evolution só responde erro genérico; avisa o motivo antes de subir o anexo para ela.
+    if (await whatsAppState(instanceOf(tenantId)) === 'closed') throw new HttpError(409, 'WhatsApp do condomínio desconectado. Reconecte lendo o QR em Configurações › Integrações e envie de novo.');
     const chats: any[] = await evo(`/chat/findChats/${inst}`, { where: { remoteJid: jid } }, 10000);
     if (!Array.isArray(chats) || !chats.some((c) => c?.remoteJid === jid)) throw new HttpError(404, 'Conversa não encontrada neste WhatsApp.');
     await gate(kind);

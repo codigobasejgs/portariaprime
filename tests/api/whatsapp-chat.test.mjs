@@ -9,7 +9,7 @@ const T = '11111111-2222-4333-8444-555555555555', OTHER = '99999999-2222-4333-84
 const JID = '123456789012345@lid';
 const ENV = { SUPABASE_URL: 'https://sb.test', SUPABASE_ANON_KEY: 'anon', SUPABASE_SERVICE_ROLE_KEY: 'svc', EVOLUTION_API_URL: 'https://evo.test', EVOLUTION_API_KEY: 'k' };
 
-async function run(action, body, { gate = null, chats = [{ remoteJid: JID }] } = {}) {
+async function run(action, body, { gate = null, chats = [{ remoteJid: JID }], state = 'open' } = {}) {
   const saved = { ...process.env }; Object.assign(process.env, ENV);
   const fetch0 = globalThis.fetch;
   const log = { gates: [], evo: [], removed: [] };
@@ -22,6 +22,7 @@ async function run(action, body, { gate = null, chats = [{ remoteJid: JID }] } =
     if (u.includes('/storage/v1/object/tenant-chat') && init.method === 'DELETE') { log.removed.push(b); return Response.json([]); }
     if (u.startsWith('https://evo.test/')) {
       const p = u.slice('https://evo.test'.length); log.evo.push({ p, b });
+      if (p.startsWith('/instance/connectionState/')) return Response.json({ instance: { state } });
       if (p.startsWith('/chat/findChats/')) return Response.json(b?.where?.remoteJid ? chats.filter((c) => c.remoteJid === b.where.remoteJid) : [{ remoteJid: JID, pushName: 'Ana W', unreadCount: 2, updatedAt: '2026-11-17T10:00:00Z', lastMessage: { key: { id: 'X', fromMe: false }, messageType: 'conversation', message: { conversation: 'oi' }, messageTimestamp: 1763373600 } }]);
       if (p.startsWith('/chat/findMessages/')) return Response.json({ messages: { total: 1, pages: 1, records: [{ key: { id: 'R1', fromMe: true, remoteJid: JID }, messageType: 'conversation', message: { conversation: 'aviso' }, messageTimestamp: 1763370000 }] } });
       if (p.startsWith('/message/')) return Response.json({ key: { id: 'NEW1' } });
@@ -59,6 +60,14 @@ test('envio: só conversa existente, franquia depois da conferência', async () 
   assert.ok(!novo.log.evo.some((e) => e.p.startsWith('/message/')));
   assert.equal((await run('chat-send', { jid: 'x@g.us', text: 'a' })).status, 400, 'grupo ou jid inválido');
   assert.equal((await run('chat-send', { jid: JID, text: '  ' })).status, 400);
+});
+
+test('WhatsApp desconectado: avisa o motivo, sem franquia nem envio', async () => {
+  const r = await run('chat-send', { jid: JID, file: `${T}/out/a.mp4`, mime: 'video/mp4' }, { state: 'close' });
+  assert.equal(r.status, 409);
+  assert.match(r.body.error || r.body.message, /desconectado/);
+  assert.deepEqual(r.log.gates, ['read']);
+  assert.ok(!r.log.evo.some((e) => e.p.startsWith('/message/')));
 });
 
 test('anexo: só da pasta out/ do condomínio, tipo permitido, removido depois', async () => {
