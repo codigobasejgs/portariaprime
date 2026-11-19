@@ -63,9 +63,9 @@ for (const [label, viewport] of VIEWS) {
     await p.keyboard.press('Escape');
     // Entrada manual exige quem autorizou.
     await p.getByRole('button', { name: 'Entrada sem convite' }).click();
-    dlg = p.getByRole('dialog', { name: 'Entrada sem convite' });
+    dlg = p.getByRole('dialog', { name: 'Registrar entrada' });
     await dlg.getByLabel('Unidade').selectOption({ index: 1 });
-    await dlg.getByLabel('Nome do visitante').fill('Roberto Prestador');
+    await dlg.getByLabel('Nome', { exact: true }).fill('Roberto Prestador');
     await dlg.getByLabel('Quem autorizou').fill('Síndico');
     await dlg.getByRole('button', { name: 'Registrar entrada' }).click();
     await p.getByText('Roberto Prestador').first().waitFor();

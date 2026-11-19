@@ -18,6 +18,7 @@ import { DevicesCard } from './config/DevicesCard';
 import { PrivacyTermCard } from './config/PrivacyTermCard';
 import { DivulgacaoCard } from './config/DivulgacaoCard';
 import { AssistantCard } from './config/AssistantCard';
+import { ConciergeSettingsCard } from './portaria/ConciergeParts';
 
 type T = ReturnType<typeof useTenant>;
 interface Mod { id: string; title: string; desc: string; keys: string; allowed: (t: T) => boolean; render: (t: T) => React.ReactNode }
@@ -42,6 +43,9 @@ export const MODULES: Mod[] = [
   { id: 'assistente', title: 'Assistente no WhatsApp', desc: 'Portaria Prime IA: conectar o WhatsApp da IA, números autorizados e nível de acesso (básico, intermediário, avançado).',
     keys: 'assistente ia inteligencia artificial whatsapp bot robo numero autorizado zelador nivel consulta relatorio audio foto conectar qr whaileys',
     allowed: (t) => t.can('team'), render: () => <AssistantCard /> },
+  { id: 'visitantes', title: 'Visitantes e portaria', desc: 'Validade dos convites, entradas por convite, documento e avisos ao morador.',
+    keys: 'visitante visita convite qr prestador portaria validade documento entrada',
+    allowed: (t) => settings(t) && t.hasModule('visitors'), render: () => <ConciergeSettingsCard /> },
   { id: 'comunicacoes', title: 'Comunicações', desc: 'Canais de aviso, validade do QR e limite por unidade.', keys: 'notificacao aviso email whatsapp push canal qr validade moradores',
     allowed: settings, render: () => <><ChannelsCard /><RemindersCard /></> },
   { id: 'integracoes', title: 'Integrações e diagnóstico', desc: 'WhatsApp do condomínio, teste de envio, falhas e reenvio.', keys: 'whatsapp evolution conectar teste diagnostico falha reenviar fila',

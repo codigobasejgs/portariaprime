@@ -134,7 +134,14 @@ export const TOURS: Tour[] = [
     goal: 'Registrar entradas por convite ou com autorização.',
     steps: [
       { area: 'visitantes', target: 'visitantes-acoes', title: 'Entrada', body: 'Leia o QR do convite ou registre a entrada sem convite informando quem autorizou. Isso não abre portão.' },
-      { area: 'visitantes', target: 'visitantes-dentro', title: 'No condomínio agora', body: 'Registre a saída quando a visita for embora.' },
+      { area: 'visitantes', target: 'visitantes-dentro', title: 'No condomínio agora', body: 'Registre a saída quando a visita for embora. Para entregador, marque as encomendas que ele trouxe.' },
+    ],
+  },
+  {
+    id: 'portaria-sindico', title: 'Portaria no painel do síndico', roles: ['admin'], requires: 'module:visitors', article: 'central-portaria',
+    goal: 'Acompanhar visitas, entradas negadas e ocorrências.',
+    steps: [
+      { area: 'painel', target: 'painel-portaria', title: 'Indicadores da portaria', body: 'Visitas, entradas negadas, convites e ocorrências abertas nos últimos 30 dias. Toque para ver o histórico.' },
     ],
   },
 ];

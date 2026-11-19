@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { BellRing, ChevronRight, Filter, Inbox, Search, X } from 'lucide-react';
+import { BellRing, ChevronRight, Contact, Filter, Inbox, Search, X } from 'lucide-react';
 import { rpc } from '../../lib/api';
 import { useRealtime, useRefreshWhileVisible, useTenant } from '../../lib/tenant';
 import { navigate, onLink, query } from '../../lib/router';
@@ -73,6 +73,13 @@ export function InicioPage() {
       )}
 
       <KeywordCard units={r.units} unit={r.unit} />
+
+      {t.hasModule('visitors') && (
+        // Mesmo app, sem cadastro paralelo: o atalho leva às visitas da(s) unidade(s) do morador.
+        <a href={`${r.base}/visitantes`} onClick={onLink} className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-3 text-sm" data-tour="morador-visitas">
+          <Contact className="w-5 h-5 shrink-0" aria-hidden /><span className="flex-1">Vai receber visita ou prestador? Crie um convite com QR.</span><ChevronRight className="w-4 h-4" aria-hidden />
+        </a>
+      )}
 
       <section className="space-y-2" data-tour="morador-historico">
         <div className="flex items-center justify-between"><h2 className="font-semibold">Recentes</h2><a href={`${r.base}/historico`} onClick={onLink} className="text-sm underline min-h-11 inline-flex items-center">Ver histórico</a></div>

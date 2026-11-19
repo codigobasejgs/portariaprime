@@ -22,6 +22,23 @@ function Kpi({ label, value, hint, href, tone }: { label: string; value: React.R
     : <Card>{body}</Card>;
 }
 
+/** Portaria (últimos 30 dias): só números, sem dados pessoais. Aparece com o módulo Visitantes contratado. */
+function ConciergeKpis() {
+  const t = useTenant();
+  const base = `/c/${t.tenant.slug}`;
+  const [k, setK] = useState<any>(null);
+  useEffect(() => { rpc('concierge_kpis', { p_tenant: t.tenant.id, p_days: 30 }).then(setK).catch(() => setK(null)); }, [t.tenant.id]);
+  if (!k) return null;
+  return (
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" data-tour="painel-portaria">
+      <Kpi label="Visitas (30 dias)" value={n(k.visits)} hint={`${n(k.by_method?.qr)} por convite · ${n(k.by_method?.manual)} sem convite`} href={`${base}/visitantes?aba=historico`} />
+      <Kpi label="Entradas negadas" value={n(k.denied)} tone={k.denied ? 'warning' : undefined} hint="pessoas bloqueadas" href={`${base}/visitantes?aba=historico`} />
+      <Kpi label="Convites criados" value={n(k.passes_created)} hint={k.avg_stay_minutes ? `permanência média ${n(k.avg_stay_minutes)} min` : 'últimos 30 dias'} />
+      {k.open_incidents !== null && <Kpi label="Ocorrências abertas" value={n(k.open_incidents)} tone={k.open_incidents ? 'danger' : undefined} href={`${base}/visitantes?aba=ocorrencias`} />}
+    </div>
+  );
+}
+
 export function PainelPage() {
   const [tab, setTab] = useState<'operacao' | 'analise'>(() => {
     const q = query('aba'); if (q === 'analise' || q === 'operacao') return q;
@@ -82,6 +99,7 @@ function Operation() {
         <Kpi label="Ocupação dos locais" value={pct === null ? '—' : `${pct}%`} hint={occ.capacity ? `${n(occ.used)} de ${n(occ.capacity)} vagas` : 'Capacidade não definida'} href={`${base}/configuracoes?m=operacao`} />
         <Kpi label="Pendências que exigem ação" value={n(pend)} tone={pend ? 'danger' : undefined} hint={pend ? `${items.length} tipo(s), detalhados abaixo` : 'nada pendente'} />
       </div>
+      {t.hasModule('visitors') && <ConciergeKpis />}
 
       <Card className="space-y-2" data-tour="painel-atencao">
         <p className="font-semibold">Precisa de atenção</p>

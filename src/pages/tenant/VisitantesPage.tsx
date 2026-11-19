@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { LogIn, LogOut, QrCode, ScanLine, UserPlus, X } from 'lucide-react';
+import { LogIn, LogOut, PackageCheck, QrCode, ScanLine, UserPlus, X } from 'lucide-react';
 import { newKey, rpc } from '../../lib/api';
 import { useRefreshWhileVisible, useTenant } from '../../lib/tenant';
 import { dateTime, unitName } from '../../lib/format';
@@ -7,9 +7,12 @@ import { loadUnits } from '../../lib/packages';
 import { Alert, Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, toast, useAction } from '../../components/ui';
 import { QRCodeDisplay } from '../../components/VisualCodes';
 import { QrCodeScanner } from '../../components/QrCodeScanner';
+import { query } from '../../lib/router';
+import { AccessPointsTab, EntryModal, HistoryTab, IncidentsTab, LinkParcelsModal } from './portaria/ConciergeParts';
 
 interface Pass { id: string; unit_id: string; unit: string; visitor_name: string; kind: string; notes: string | null; valid_from: string; valid_until: string; uses: number; max_uses: number; status: string }
 interface Visit { id: string; unit: string; visitor_name: string; kind: string; method: string; checked_in_at: string; checked_out_at: string | null; authorized_by_name: string | null }
+type Tab = 'agora' | 'convites' | 'ocorrencias' | 'historico' | 'acessos';
 
 const KIND: Record<string, string> = { visita: 'Visita', prestador: 'Prestador de serviço', entrega: 'Entrega', outro: 'Outro' };
 const STATUS: Record<string, [string, 'success' | 'neutral' | 'warning' | 'danger']> = {
@@ -28,7 +31,10 @@ export function VisitantesPage({ units }: { units?: { id: string; block: string 
   const [error, setError] = useState<string | null>(null);
   const [invite, setInvite] = useState(false);
   const [shown, setShown] = useState<{ qr: string; name: string; until: string } | null>(null);
-  const [checkin, setCheckin] = useState<'qr' | 'manual' | null>(null);
+  const [checkin, setCheckin] = useState<'qr' | null>(null);
+  const [entry, setEntry] = useState<string | null>(null);
+  const [linking, setLinking] = useState<Visit | null>(null);
+  const [tab, setTab] = useState<Tab>(() => (['convites', 'ocorrencias', 'historico', 'acessos'].includes(query('aba') || '') ? query('aba') as Tab : 'agora'));
   const { busy, run } = useAction();
   const load = useCallback(() => rpc<{ passes: Pass[]; visits: Visit[] }>('visitor_list', { p_tenant: t.tenant.id })
     .then((r) => { setData(r); setError(null); }).catch((e) => setError(e.message)), [t.tenant.id]);
@@ -47,14 +53,27 @@ export function VisitantesPage({ units }: { units?: { id: string; block: string 
           <p className="text-sm text-muted">{staff ? 'Confira o convite do morador ou registre a entrada com quem autorizou. Registrar a entrada não abre portão.' : 'Convide visitas e prestadores. Cada convite tem um QR de uso único com validade.'}</p></div>
         <div className="flex flex-wrap gap-2" data-tour="visitantes-acoes">
           {staff && <Button onClick={() => setCheckin('qr')}><ScanLine className="w-4 h-4" aria-hidden /> Ler convite (QR)</Button>}
-          {staff && <Button variant="secondary" onClick={() => setCheckin('manual')}><LogIn className="w-4 h-4" aria-hidden /> Entrada sem convite</Button>}
+          {staff && <Button variant="secondary" onClick={() => setEntry('visita')}><LogIn className="w-4 h-4" aria-hidden /> Entrada sem convite</Button>}
+          {staff && <Button variant="secondary" onClick={() => setEntry('entrega')}><PackageCheck className="w-4 h-4" aria-hidden /> Entregador</Button>}
           <Button variant={staff ? 'ghost' : 'primary'} onClick={() => setInvite(true)}><UserPlus className="w-4 h-4" aria-hidden /> Novo convite</Button>
         </div>
       </div>
+      {staff && (
+        <div role="tablist" aria-label="Seções da portaria" className="flex gap-1 border-b border-line overflow-x-auto">
+          {([['agora', 'Agora'], ['convites', 'Convites'], ...(t.hasModule('incident') ? [['ocorrencias', 'Ocorrências']] : []),
+            ...(t.hasModule('concierge') ? [['historico', 'Histórico'], ['acessos', 'Portões e câmeras']] : [])] as [Tab, string][]).map(([id, label]) => (
+            <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
+              className={`min-h-11 px-4 -mb-px border-b-2 text-sm font-medium whitespace-nowrap ${tab === id ? 'border-primary text-text' : 'border-transparent text-muted hover:text-text'}`}>{label}</button>
+          ))}
+        </div>
+      )}
+      {staff && tab === 'ocorrencias' && <IncidentsTab />}
+      {staff && tab === 'historico' && <HistoryTab />}
+      {staff && tab === 'acessos' && <AccessPointsTab />}
       {error && <Alert tone="danger">{error} <button className="underline" onClick={() => void load()}>Tentar novamente</button></Alert>}
-      {!data && !error ? <Spinner /> : data && (
+      {(!staff || tab === 'agora' || tab === 'convites') && (!data && !error ? <Spinner /> : data && (
         <>
-          {staff && (
+          {staff && tab === 'agora' && (
             <Card className="space-y-2" data-tour="visitantes-dentro">
               <h2 className="font-semibold">No condomínio agora ({open.length})</h2>
               {open.length === 0 ? <p className="text-sm text-muted">Nenhum visitante com entrada em aberto.</p> : (
@@ -62,12 +81,15 @@ export function VisitantesPage({ units }: { units?: { id: string; block: string 
                   <li key={v.id} className="py-2 flex flex-wrap items-center justify-between gap-2 text-sm">
                     <div className="min-w-0"><p className="font-medium">{v.visitor_name} <span className="text-muted font-normal">· {v.unit}</span></p>
                       <p className="text-xs text-muted">{KIND[v.kind]} · entrou {dateTime(v.checked_in_at, t.tenant.timezone)} · {v.method === 'qr' ? 'por convite' : `autorizado por ${v.authorized_by_name}`}</p></div>
-                    <Button variant="secondary" onClick={() => out(v)} disabled={busy}><LogOut className="w-4 h-4" aria-hidden /> Registrar saída</Button>
+                    <span className="flex flex-wrap gap-2">
+                      {v.kind === 'entrega' && <Button variant="ghost" onClick={() => setLinking(v)}><PackageCheck className="w-4 h-4" aria-hidden /> Encomendas</Button>}
+                      <Button variant="secondary" onClick={() => out(v)} disabled={busy}><LogOut className="w-4 h-4" aria-hidden /> Registrar saída</Button>
+                    </span>
                   </li>))}</ul>
               )}
             </Card>
           )}
-          <Card className="space-y-2" data-tour="visitantes-convites">
+          {(!staff || tab === 'convites') && <Card className="space-y-2" data-tour="visitantes-convites">
             <h2 className="font-semibold">Convites</h2>
             {data.passes.length === 0 ? <Empty title="Nenhum convite">{staff ? 'Os convites dos moradores aparecem aqui.' : 'Toque em “Novo convite” para gerar o QR da visita.'}</Empty> : (
               <ul className="divide-y divide-line">{data.passes.map((p) => (
@@ -78,7 +100,7 @@ export function VisitantesPage({ units }: { units?: { id: string; block: string 
                     {p.status === 'active' && <Button variant="ghost" onClick={() => revoke(p)} aria-label={`Cancelar convite de ${p.visitor_name}`}><X className="w-4 h-4" /></Button>}</div>
                 </li>))}</ul>
             )}
-          </Card>
+          </Card>}
           {!staff && data.visits.length > 0 && (
             <Card className="space-y-2"><h2 className="font-semibold">Visitas recentes</h2>
               <ul className="divide-y divide-line text-sm">{data.visits.map((v) => (
@@ -87,7 +109,7 @@ export function VisitantesPage({ units }: { units?: { id: string; block: string 
             </Card>
           )}
         </>
-      )}
+      ))}
       {invite && <InviteModal units={units} onClose={() => setInvite(false)} onCreated={(r) => { setInvite(false); setShown(r); void load(); }} />}
       {shown && (
         <Modal title="Convite criado" onClose={() => setShown(null)}>
@@ -100,6 +122,8 @@ export function VisitantesPage({ units }: { units?: { id: string; block: string 
         </Modal>
       )}
       {checkin && <CheckinModal mode={checkin} units={units} onClose={() => setCheckin(null)} onDone={() => { setCheckin(null); void load(); }} />}
+      {entry && <EntryModal kind={entry} onClose={() => setEntry(null)} onDone={(r) => { setEntry(null); void load(); if (entry === 'entrega' && !r.denied) setLinking({ id: r.id, visitor_name: r.visitor_name } as Visit); }} />}
+      {linking && <LinkParcelsModal visit={linking} onClose={() => setLinking(null)} />}
     </div>
   );
 }
@@ -165,12 +189,20 @@ function CheckinModal({ mode, units: given, onClose, onDone }: { mode: 'qr' | 'm
   const [key] = useState(newKey);
   const { busy, run } = useAction();
   const lookup = (code: string) => run(async () => { setQr(code); setScan(false); setFound(await rpc('visitor_pass_lookup', { p_tenant: t.tenant.id, p_qr: code })); });
-  const enter = () => run(async () => {
-    const r = await rpc<any>('visitor_check_in', mode === 'qr' ? { p_tenant: t.tenant.id, p_idempotency_key: key, p_qr: qr }
-      : { p_tenant: t.tenant.id, p_idempotency_key: key, p_unit: f.unit, p_name: f.name, p_kind: f.kind, p_authorized_by: f.by, p_reason: f.reason || null });
-    toast.success(`Entrada de ${r.visitor_name || f.name || found?.visitor_name} registrada. Morador avisado.`);
-    onDone();
-  });
+  const enter = (confirmDistinct = false): Promise<void> => run(async () => {
+    try {
+      const r = await rpc<any>('visitor_entry', mode === 'qr' ? { p_tenant: t.tenant.id, p_idempotency_key: key, p_qr: qr, p_confirm_distinct: confirmDistinct }
+        : { p_tenant: t.tenant.id, p_idempotency_key: key, p_unit: f.unit, p_name: f.name, p_kind: f.kind, p_authorized_by: f.by, p_reason: f.reason || null, p_confirm_distinct: confirmDistinct });
+      // Bloqueado: a tentativa fica registrada como negada; a portaria NÃO libera a entrada.
+      if (r.denied) { toast.error(`Entrada NÃO autorizada: ${r.visitor_name} está bloqueado(a). Procure a administração.`); onDone(); return; }
+      toast.success(`Entrada de ${r.visitor_name || f.name || found?.visitor_name} registrada.`);
+      onDone();
+    } catch (e: any) {
+      if (!confirmDistinct && /pessoa bloqueada com este nome/.test(e?.message || '')
+          && confirm('Há uma pessoa BLOQUEADA com este nome. Você conferiu o documento e é outra pessoa?')) { await enter(true); return; }
+      throw e;
+    }
+  }) as Promise<void>;
   return (
     <Modal title={mode === 'qr' ? 'Ler convite' : 'Entrada sem convite'} onClose={onClose}>
       {mode === 'qr' ? (
