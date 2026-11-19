@@ -10,7 +10,7 @@ import { Alert, Button, Empty, Input, Spinner, toast } from '../../components/ui
 interface Chat { jid: string; name: string | null; unit: string | null; phone: string | null; unread: number; at: number; last: { text: string; media: string | null; fromMe: boolean } | null }
 interface Msg { id: string; fromMe: boolean; at: number; text: string; media: string | null; fileName: string | null }
 
-const MAX = 16 * 1024 * 1024;
+const MAX = 20 * 1024 * 1024;
 const OK_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/3gpp', 'application/pdf'];
 const MEDIA_LABEL: Record<string, string> = { image: 'Foto', video: 'Vídeo', audio: 'Áudio', document: 'Documento' };
 const time = (ms: number, tz: string) => ms ? new Intl.DateTimeFormat('pt-BR', { timeZone: tz, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(ms) : '';
@@ -100,7 +100,7 @@ function Thread({ chat, onBack, onSent }: { chat: Chat; onBack: () => void; onSe
   const choose = (f: File | undefined) => {
     if (!f) return;
     if (!OK_TYPES.includes(f.type)) { toast.error('Envie foto (JPG, PNG, WebP), vídeo (MP4) ou PDF.'); return; }
-    if (f.size > MAX) { toast.error('Arquivo grande demais (máximo 16 MB).'); return; }
+    if (f.size > MAX) { toast.error('Arquivo grande demais (máximo 20 MB).'); return; }
     setFile(f);
   };
   const send = async (e: React.FormEvent) => {

@@ -51,6 +51,7 @@ test('gate, franquia, auditoria, identificação e bucket', async () => {
     await assert.rejects(db.rpc(port, 'whatsapp_chat_who', { p_tenant: A, p_refs: '{3EBAAAAAAAAAAAAAAAAAA1}' }), /configurações/);
 
     // Bucket: síndico grava só em <A>/out/; nada em in/ nem em outro condomínio; anon e porteiro não.
+    assert.equal((await db.sql("select file_size_limit::int n from storage.buckets where id='tenant-chat'"))[0].n, 20971520, 'anexo até 20 MB');
     const put = (who, name) => db.as(who, "insert into storage.objects (bucket_id, name) values ('tenant-chat', $1)", [name]);
     await put(sind, `${A}/out/x.jpg`);
     await assert.rejects(put(sind, `${A}/in/x.jpg`), /row-level security/);

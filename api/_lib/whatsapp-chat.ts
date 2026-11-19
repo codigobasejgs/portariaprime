@@ -28,7 +28,8 @@ async function evo(path: string, body: unknown, timeout = 20000): Promise<any> {
     body: JSON.stringify(body), signal: AbortSignal.timeout(timeout),
   });
   // Mídia recebida pode ser enorme (qualquer pessoa manda até 2 GB): recusa antes de ler o corpo.
-  if (Number(r.headers.get('content-length')) > 24 * 1024 * 1024) { await r.body?.cancel(); throw new HttpError(413, 'Arquivo grande demais para abrir no painel (máximo 16 MB). Abra no celular do condomínio.'); }
+  // 20 MB em base64 viram ~27 MB de JSON.
+  if (Number(r.headers.get('content-length')) > 28 * 1024 * 1024) { await r.body?.cancel(); throw new HttpError(413, 'Arquivo grande demais para abrir no painel (máximo 20 MB). Abra no celular do condomínio.'); }
   const d: any = await r.json().catch(() => ({}));
   if (r.status === 404) throw new HttpError(409, 'WhatsApp do condomínio não encontrado. Conecte em Configurações › Integrações.');
   if (!r.ok) throw new HttpError(502, r.status === 400 ? 'O WhatsApp recusou a mensagem (conversa ou arquivo inválido).' : 'WhatsApp indisponível agora. Tente de novo.');
